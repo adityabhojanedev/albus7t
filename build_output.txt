@@ -1,0 +1,26 @@
+
+> albus@0.1.0 build
+> next build
+
+▲ Next.js 16.2.1 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.4s
+  Running TypeScript ...
+Failed to type check.
+
+./app/components/VideosSection.tsx:202:27
+Type error: No overload matches this call.
+  Overload 1 of 2, '(props: Omit<ReactPlayerProps, "ref"> & RefAttributes<HTMLVideoElement>, context?: any): string | number | ... 7 more ... | undefined', gave the following error.
+    Object literal may only specify known properties, and 'playerVars' does not exist in type '{ cc_lang_pref?: string | undefined; cc_load_policy?: 0 | 1 | undefined; color?: "red" | "white" | undefined; disablekb?: 0 | 1 | undefined; enablejsapi?: 0 | 1 | undefined; end?: number | undefined; ... 8 more ...; referrerpolicy?: string | undefined; }'.
+  Overload 2 of 2, '(props: Omit<ReactPlayerProps, "ref"> & RefAttributes<HTMLVideoElement>): string | number | bigint | boolean | ... 5 more ... | undefined', gave the following error.
+    Object literal may only specify known properties, and 'playerVars' does not exist in type '{ cc_lang_pref?: string | undefined; cc_load_policy?: 0 | 1 | undefined; color?: "red" | "white" | undefined; disablekb?: 0 | 1 | undefined; enablejsapi?: 0 | 1 | undefined; end?: number | undefined; ... 8 more ...; referrerpolicy?: string | undefined; }'.
+
+  [90m200 |[0m                       config={{
+  [90m201 |[0m                         youtube: {
+[31m[1m>[0m [90m202 |[0m                           playerVars: {
+  [90m    |[0m                           [31m[1m^[0m
+  [90m203 |[0m                             modestbranding: [35m1[0m,
+  [90m204 |[0m                             rel: [35m0[0m, [90m// Fallback block[0m
+  [90m205 |[0m                             showinfo: [35m0[0m,
+Next.js build worker exited with code: 1 and signal: null
