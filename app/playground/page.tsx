@@ -2,6 +2,7 @@
 
 import Toolbar from "./components/Toolbar";
 import CanvasContainer from "./components/CanvasContainer";
+import SidebarDrawer from "./components/SidebarDrawer";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -28,12 +29,13 @@ export default function PlaygroundPage() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#0A0705]">
-      {/* Absolute Header inside playground if needed, otherwise rely on the toolbar */}
-      
-      {/* Draggable/Selectable Toolbar */}
+      {/* Central toolbar */}
       <Toolbar />
-      
-      {/* Konva Workspace */}
+
+      {/* Top-right sidebar trigger + drawer */}
+      <SidebarDrawer />
+
+      {/* Konva canvas workspace */}
       <CanvasContainer />
     </div>
   );

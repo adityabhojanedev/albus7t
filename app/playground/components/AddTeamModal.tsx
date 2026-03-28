@@ -5,7 +5,11 @@ import { useBoardStore } from '../store/useBoardStore';
 import { X, Upload, Link as LinkIcon, Users, Check, Trash2 } from 'lucide-react';
 
 export default function AddTeamModal() {
-  const { addTeam, updateTeam, removeTeam, setAddTeamModalOpen, saveTeamToLibrary, editingTeamId, setEditingTeamId, teams } = useBoardStore();
+  const {
+    addTeam, updateTeam, removeTeam, setAddTeamModalOpen, saveTeamToLibrary,
+    editingTeamId, setEditingTeamId, teams,
+    editingSavedTeamId, setEditingSavedTeamId, savedTeams, updateSavedTeam
+  } = useBoardStore();
 
   const [logoUrl, setLogoUrl] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -16,7 +20,21 @@ export default function AddTeamModal() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editingTeamId) {
+    if (editingSavedTeamId) {
+      // Editing a saved library team
+      const t = savedTeams.find(t => t.id === editingSavedTeamId);
+      if (t) {
+        setLogoUrl(t.logoUrl);
+        setTeamName(t.name || '');
+        setThemeColor(t.themeColor);
+        setPlayerNames([
+          t.players[0]?.name || '',
+          t.players[1]?.name || '',
+          t.players[2]?.name || '',
+          t.players[3]?.name || ''
+        ]);
+      }
+    } else if (editingTeamId) {
       const teamToEdit = teams.find(t => t.id === editingTeamId);
       if (teamToEdit) {
         setLogoUrl(teamToEdit.logoUrl);
@@ -30,7 +48,7 @@ export default function AddTeamModal() {
         ]);
       }
     }
-  }, [editingTeamId, teams]);
+  }, [editingTeamId, editingSavedTeamId, teams, savedTeams]);
 
   const colors = ['#C47C2B', '#E8A44A', '#FFFFFF', '#FF3B30', '#34C759', '#007AFF', '#A259FF'];
 
@@ -55,11 +73,21 @@ export default function AddTeamModal() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Default to a generic placeholder if logo is empty/broken
     const finalLogo = (!logoUrl || previewError) ? 'https://ui-avatars.com/api/?name=Team&background=0D8ABC&color=fff' : logoUrl;
 
-    if (editingTeamId) {
+    if (editingSavedTeamId) {
+      // Update saved library team
+      const t = savedTeams.find(t => t.id === editingSavedTeamId);
+      if (t) {
+        updateSavedTeam(editingSavedTeamId, {
+          name: teamName.trim() || 'Custom Squad',
+          logoUrl: finalLogo,
+          themeColor,
+          players: t.players.map((p, idx) => ({ ...p, name: playerNames[idx].trim() || `Player ${idx + 1}` }))
+        });
+      }
+      setEditingSavedTeamId(null);
+    } else if (editingTeamId) {
       const teamToEdit = teams.find(t => t.id === editingTeamId);
       if (teamToEdit) {
         updateTeam(editingTeamId, {
@@ -78,15 +106,13 @@ export default function AddTeamModal() {
         players: playerNames.map((name, idx) => ({
           id: Math.random().toString(36).substring(2, 9),
           name: name.trim() || `Player ${idx + 1}`,
-          x: 0, 
+          x: 0,
           y: 0
         }))
       };
-
       saveTeamToLibrary(teamData);
-      addTeam(teamData); // Auto-spawn it on creation too
+      addTeam(teamData);
     }
-
     setAddTeamModalOpen(false);
   };
 

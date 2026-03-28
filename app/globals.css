@@ -20,3 +20,22 @@ body {
   font-family: var(--font-sans), sans-serif;
   overflow-x: hidden;
 }
+
+/* Slim dark scrollbar used in sidebar & canvas panels */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #2A1F15 transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #2A1F15;
+  border-radius: 99px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #C47C2B;
+}
