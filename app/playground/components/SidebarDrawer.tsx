@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useBoardStore, MAP_CATEGORIES } from '../store/useBoardStore';
 import {
   Settings, X, Users, Map, Trash2, Upload,
-  Plus, Save, Link as LinkIcon, AlertCircle, GripHorizontal, Pencil, Check
+  Plus, Save, Link as LinkIcon, AlertCircle, GripHorizontal, Pencil, Check, Keyboard
 } from 'lucide-react';
 import AddTeamModal from './AddTeamModal';
+import { useHotkeyStore } from '../store/useHotkeyStore';
 
 // ─── Mini inline-edit row ─────────────────────────────────────────────────────
 function MapEditRow({ mapId, initialTitle, initialCategory, onDone }: {
@@ -65,6 +66,8 @@ export default function SidebarDrawer() {
     savedMaps, loadSavedMaps, addSavedMap, removeSavedMap,
     setBackgroundImage, backgroundImage,
   } = useBoardStore();
+
+  const { setEditorOpen } = useHotkeyStore();
 
   type Tab = 'squads' | 'maps';
   const [activeTab, setActiveTab] = useState<Tab>('squads');
@@ -479,7 +482,14 @@ export default function SidebarDrawer() {
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 border-t border-[#2A1F15] px-4 py-2">
+        <div className="flex-shrink-0 border-t border-[#2A1F15] px-4 py-2 flex flex-col gap-2">
+          <button
+            onClick={() => { setEditorOpen(true); setSidebarOpen(false); }}
+            className="w-full flex items-center justify-center gap-2 bg-[#1A0F08] hover:bg-[#2A1F15] border border-[#2A1F15] hover:border-[#C47C2B]/30 text-[#7A6A55] hover:text-[#C47C2B] py-2 rounded-lg text-xs font-sora font-semibold transition-all"
+          >
+            <Keyboard size={13} />
+            Customize Shortcuts
+          </button>
           <p className="text-[#3A2F25] text-[10px] font-inter text-center tracking-wider">ALBUS TACTICAL BOARD · PHASE 3</p>
         </div>
       </aside>

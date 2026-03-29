@@ -3,12 +3,16 @@
 import Toolbar from "./components/Toolbar";
 import CanvasContainer from "./components/CanvasContainer";
 import SidebarDrawer from "./components/SidebarDrawer";
+import HotkeyEditorModal from "./components/HotkeyEditorModal";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useHotkeyStore } from "./store/useHotkeyStore";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function PlaygroundPage() {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const loadBindings = useHotkeyStore(s => s.loadBindings);
 
   useEffect(() => {
     const authFlag = sessionStorage.getItem("albus_authenticated");
@@ -18,6 +22,12 @@ export default function PlaygroundPage() {
       router.replace("/");
     }
   }, [router]);
+
+  // Load saved hotkey bindings on mount
+  useEffect(() => { loadBindings(); }, [loadBindings]);
+
+  // Global keyboard shortcut listener
+  useKeyboardShortcuts();
 
   if (!isAuthorized) {
     return (
@@ -37,6 +47,9 @@ export default function PlaygroundPage() {
 
       {/* Konva canvas workspace */}
       <CanvasContainer />
+
+      {/* Hotkey editor modal */}
+      <HotkeyEditorModal />
     </div>
   );
 }

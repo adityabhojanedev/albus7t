@@ -153,7 +153,7 @@ export default function TacticsCanvas() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard shortcuts
+  // Enter key for crop confirmation (needs stageRef access) + Escape for path cancel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT') return;
@@ -183,35 +183,18 @@ export default function TacticsCanvas() {
           setSelectedElementId(null);
         }
       }
+      // Escape also cancels path drawing state
       if (e.key === 'Escape') {
-        setCroppingElementId(null);
-        setSelectedElementId(null);
         setPathTargetPlayerId(null);
         setPathTargetTeamId(null);
         setDraftPath([]);
         setIsDrawingPath(false);
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !croppingElementId) {
-        if (selectedElementId) {
-          const el = elements.find(e => e.id === selectedElementId);
-          if (el?.isLocked) return;
-          removeElement(selectedElementId);
-          commitHistory();
-          setSelectedElementId(null);
-        } else if (selectedPlayerId) {
-          const team = teams.find(t => t.players.some(p => p.id === selectedPlayerId));
-          const player = team?.players.find(p => p.id === selectedPlayerId);
-          if (player?.isLocked) return;
-          if (team) removeTeam(team.id);
-          setSelectedPlayerId(null);
-        }
-      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementId, croppingElementId, elements, removeElement, commitHistory,
-    setSelectedElementId, setCroppingElementId, updateElement, selectedPlayerId,
-    teams, removeTeam, setSelectedPlayerId,]);
+  }, [croppingElementId, elements, commitHistory,
+    setSelectedElementId, setCroppingElementId, updateElement]);
 
   // Transformer attach
   useEffect(() => {

@@ -1,17 +1,18 @@
 "use client";
 
 import { useBoardStore, Tool } from "../store/useBoardStore";
+import { useHotkeyStore, formatKeyDisplay } from "../store/useHotkeyStore";
 import {
   Pointer, Hand, Pen, Zap, Circle, Square,
   ZoomIn, ZoomOut, Trash2,
   Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors,
   Route, Lock, Unlock, ImageOff
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 // ─── Tool Button ──────────────────────────────────────────────────────────────
 const ToolBtn = ({
-  tool, activeTool, onClick, icon: Icon, label, danger = false
+  tool, activeTool, onClick, icon: Icon, label, danger = false, shortcutKey
 }: {
   tool: Tool | 'delete' | 'crop';
   activeTool?: Tool;
@@ -19,13 +20,14 @@ const ToolBtn = ({
   icon: React.ElementType;
   label: string;
   danger?: boolean;
+  shortcutKey?: string;
 }) => {
   const isActive = activeTool === tool;
   return (
     <button
       onClick={() => onClick(tool)}
-      title={label}
-      className={`p-2 rounded-md transition-all duration-200 ${
+      title={shortcutKey ? `${label} (${formatKeyDisplay(shortcutKey)})` : label}
+      className={`relative p-2 rounded-md transition-all duration-200 ${
         danger
           ? 'text-red-500/80 hover:text-red-400 hover:bg-red-500/10'
           : isActive
@@ -34,6 +36,15 @@ const ToolBtn = ({
       }`}
     >
       <Icon size={20} />
+      {shortcutKey && (
+        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+          isActive
+            ? 'bg-[#0A0705]/40 text-[#0A0705]'
+            : 'bg-[#2A1F15] text-[#7A6A55]'
+        }`}>
+          {formatKeyDisplay(shortcutKey)}
+        </span>
+      )}
     </button>
   );
 };
@@ -54,6 +65,12 @@ export default function Toolbar() {
     croppingElementId, setCroppingElementId,
     teams, clearAllAnimationPaths,
   } = useBoardStore();
+
+  const { bindings, loadBindings } = useHotkeyStore();
+  useEffect(() => { loadBindings(); }, [loadBindings]);
+
+  // Helper to get current key for a tool
+  const keyFor = (toolId: string) => bindings.find(b => b.toolId === toolId)?.currentKey || '';
 
   const [openPopoverTool, setOpenPopoverTool] = useState<Tool | null>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -162,19 +179,19 @@ export default function Toolbar() {
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-1 bg-[#0A0705CC] backdrop-blur-md border border-[#2A1F15] rounded-[12px] px-2 py-2 shadow-2xl">
 
       {/* ── Group 1: Navigation tools ─────────────────────────── */}
-      <ToolBtn tool="select" activeTool={activeTool} onClick={handleToolClick} icon={Pointer} label="Select (V)" />
-      <ToolBtn tool="pan" activeTool={activeTool} onClick={handleToolClick} icon={Hand} label="Pan (H)" />
+      <ToolBtn tool="select" activeTool={activeTool} onClick={handleToolClick} icon={Pointer} label="Select" shortcutKey={keyFor('select')} />
+      <ToolBtn tool="pan" activeTool={activeTool} onClick={handleToolClick} icon={Hand} label="Pan" shortcutKey={keyFor('pan')} />
 
       <Divider />
 
       {/* ── Group 2: Drawing tools ────────────────────────────── */}
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
-        <ToolBtn tool="pen" activeTool={activeTool} onClick={handleToolClick} icon={Pen} label="Pen (P)" />
+        <ToolBtn tool="pen" activeTool={activeTool} onClick={handleToolClick} icon={Pen} label="Pen" shortcutKey={keyFor('pen')} />
         {openPopoverTool === 'pen' && renderSettingsPopover()}
       </div>
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
-        <ToolBtn tool="eraser" activeTool={activeTool} onClick={handleToolClick} icon={Eraser} label="Eraser (E)" />
+        <ToolBtn tool="eraser" activeTool={activeTool} onClick={handleToolClick} icon={Eraser} label="Eraser" shortcutKey={keyFor('eraser')} />
         {openPopoverTool === 'eraser' && (
           <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-2 z-50">
             <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center mb-1">Eraser: {eraserSize}px</span>
@@ -186,17 +203,17 @@ export default function Toolbar() {
       </div>
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
-        <ToolBtn tool="laser" activeTool={activeTool} onClick={handleToolClick} icon={Zap} label="Laser (L)" />
+        <ToolBtn tool="laser" activeTool={activeTool} onClick={handleToolClick} icon={Zap} label="Laser" shortcutKey={keyFor('laser')} />
         {openPopoverTool === 'laser' && renderSettingsPopover()}
       </div>
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
-        <ToolBtn tool="circle" activeTool={activeTool} onClick={handleToolClick} icon={Circle} label="Circle (C)" />
+        <ToolBtn tool="circle" activeTool={activeTool} onClick={handleToolClick} icon={Circle} label="Circle" shortcutKey={keyFor('circle')} />
         {openPopoverTool === 'circle' && renderSettingsPopover(true)}
       </div>
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
-        <ToolBtn tool="rectangle" activeTool={activeTool} onClick={handleToolClick} icon={Square} label="Rectangle (R)" />
+        <ToolBtn tool="rectangle" activeTool={activeTool} onClick={handleToolClick} icon={Square} label="Rectangle" shortcutKey={keyFor('rectangle')} />
         {openPopoverTool === 'rectangle' && renderSettingsPopover(true)}
       </div>
 
@@ -204,7 +221,7 @@ export default function Toolbar() {
 
       {/* ── Group 3: Tactical tools ───────────────────────────── */}
       <div className="relative group">
-        <ToolBtn tool="path" activeTool={activeTool} onClick={handleToolClick} icon={Route} label="Path Tool — draw player routes" />
+        <ToolBtn tool="path" activeTool={activeTool} onClick={handleToolClick} icon={Route} label="Path Tool" shortcutKey={keyFor('path')} />
         {activeTool === 'path' && hasAnyPath && (
           <button
             onClick={clearAllAnimationPaths}
