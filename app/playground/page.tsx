@@ -4,6 +4,7 @@ import Toolbar from "./components/Toolbar";
 import CanvasContainer from "./components/CanvasContainer";
 import SidebarDrawer from "./components/SidebarDrawer";
 import HotkeyEditorModal from "./components/HotkeyEditorModal";
+import TutorialPanel from "./components/TutorialPanel";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useHotkeyStore } from "./store/useHotkeyStore";
 import { useEffect, useState } from "react";
@@ -50,6 +51,9 @@ export default function PlaygroundPage() {
 
       {/* Hotkey editor modal */}
       <HotkeyEditorModal />
+
+      {/* Shortcuts tutorial panel */}
+      <TutorialPanel />
     </div>
   );
 }

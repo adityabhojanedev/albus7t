@@ -490,7 +490,7 @@ export default function SidebarDrawer() {
             <Keyboard size={13} />
             Customize Shortcuts
           </button>
-          <p className="text-[#3A2F25] text-[10px] font-inter text-center tracking-wider">ALBUS TACTICAL BOARD · PHASE 3</p>
+          <p className="text-[#3A2F25] text-[10px] font-inter text-center tracking-wider">ALBUS TACTICAL BOARD · PHASE 5</p>
         </div>
       </aside>
 
