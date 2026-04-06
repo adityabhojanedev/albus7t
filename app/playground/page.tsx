@@ -4,6 +4,7 @@ import Toolbar from "./components/Toolbar";
 import CanvasContainer from "./components/CanvasContainer";
 import SidebarDrawer from "./components/SidebarDrawer";
 import HotkeyEditorModal from "./components/HotkeyEditorModal";
+import ContextualHelp from "./components/ContextualHelp";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useHotkeyStore } from "./store/useHotkeyStore";
 import { useEffect, useState } from "react";
@@ -50,6 +51,9 @@ export default function PlaygroundPage() {
 
       {/* Hotkey editor modal */}
       <HotkeyEditorModal />
+
+      {/* Contextual help cards — dynamic, per-tool */}
+      <ContextualHelp />
     </div>
   );
 }

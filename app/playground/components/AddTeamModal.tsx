@@ -107,7 +107,9 @@ export default function AddTeamModal() {
           id: Math.random().toString(36).substring(2, 9),
           name: name.trim() || `Player ${idx + 1}`,
           x: 0,
-          y: 0
+          y: 0,
+          status: 'alive' as const,
+          deathType: null,
         }))
       };
       saveTeamToLibrary(teamData);

@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 
-export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'laser' | 'circle' | 'rectangle' | 'path' | 'lock';
+export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'laser' | 'circle' | 'rectangle' | 'path' | 'lock' | 'fight' | 'revive';
+
+export interface StagedFight {
+  step: 'selectP1' | 'drawP1' | 'selectP2' | 'drawP2' | 'ready';
+  p1Id: string | null;
+  p1TeamId: string | null;
+  p1Path: number[] | null;
+  p2Id: string | null;
+  p2TeamId: string | null;
+  p2Path: number[] | null;
+  outcome: 'knocked' | 'dead' | null;
+}
 
 export interface Point {
   x: number;
@@ -37,6 +48,8 @@ export interface Player {
   scaleY?: number;
   animationPath?: number[]; // flat [x1,y1,x2,y2,...] in canvas coords
   isLocked?: boolean;
+  status: 'alive' | 'knocked' | 'dead';
+  deathType: 'combat' | 'zone' | 'self' | null;
 }
 
 export interface Team {
@@ -112,9 +125,28 @@ interface BoardState {
   togglePlayerLock: (teamId: string, playerId: string) => void;
   removeTeam: (teamId: string) => void;
 
+  // Combat lifecycle
+  knockPlayer: (teamId: string, playerId: string) => void;
+  eliminatePlayer: (teamId: string, playerId: string, deathType?: 'combat' | 'zone' | 'self') => void;
+  revivePlayer: (teamId: string, playerId: string) => void;
+  recallPlayer: (teamId: string, playerId: string, newX: number, newY: number) => void;
+  recallingPlayerId: string | null;
+  recallingTeamId: string | null;
+  setRecallingPlayer: (playerId: string | null, teamId: string | null) => void;
+
   // Animation state
   isAnimating: boolean;
   setAnimating: (val: boolean) => void;
+
+  // Staged fight
+  stagedFight: StagedFight;
+  setStagedFight: (fight: Partial<StagedFight>) => void;
+  clearStagedFight: () => void;
+
+  // Staged revive
+  stagedRevive: { medicId: string | null; medicTeamId: string | null; targetId: string | null; targetTeamId: string | null };
+  setStagedRevive: (r: Partial<{ medicId: string | null; medicTeamId: string | null; targetId: string | null; targetTeamId: string | null }>) => void;
+  clearStagedRevive: () => void;
 
   savedTeams: Team[];
   loadSavedTeams: () => void;
@@ -285,6 +317,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       ...p,
       x: centerX + (offsets[index]?.dx || 0),
       y: centerY + (offsets[index]?.dy || 0),
+      status: p.status || 'alive' as const,
+      deathType: p.deathType ?? null,
     }));
     const newTeam: Team = { ...teamData, id: teamId, players: populatedPlayers };
     return { teams: [...state.teams, newTeam] };
@@ -349,8 +383,92 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   removeTeam: (teamId) => set((state) => ({ teams: state.teams.filter(t => t.id !== teamId) })),
 
+  // ── Combat lifecycle ────────────────────────────────────────────────────────
+  knockPlayer: (teamId, playerId) => set((state) => {
+    const team = state.teams.find(t => t.id === teamId);
+    if (!team) return state;
+
+    // First, knock the target player
+    let updatedPlayers = team.players.map(p =>
+      p.id === playerId ? { ...p, status: 'knocked' as const, deathType: 'combat' as const } : p
+    );
+
+    // Squad wipe check: if ALL players on the team are now knocked or dead
+    const allDown = updatedPlayers.every(p => p.status === 'knocked' || p.status === 'dead');
+    if (allDown) {
+      updatedPlayers = updatedPlayers.map(p => ({
+        ...p,
+        status: 'dead' as const,
+        deathType: p.deathType || 'combat' as const,
+        isLocked: true,
+      }));
+    }
+
+    return {
+      teams: state.teams.map(t =>
+        t.id === teamId ? { ...t, players: updatedPlayers } : t
+      ),
+    };
+  }),
+
+  eliminatePlayer: (teamId, playerId, deathType = 'combat') => set((state) => ({
+    teams: state.teams.map(t => {
+      if (t.id !== teamId) return t;
+      return {
+        ...t,
+        players: t.players.map(p =>
+          p.id === playerId
+            ? { ...p, status: 'dead' as const, deathType, isLocked: true }
+            : p
+        ),
+      };
+    }),
+  })),
+
+  revivePlayer: (teamId, playerId) => set((state) => ({
+    teams: state.teams.map(t => {
+      if (t.id !== teamId) return t;
+      return {
+        ...t,
+        players: t.players.map(p =>
+          p.id === playerId
+            ? { ...p, status: 'alive' as const, deathType: null }
+            : p
+        ),
+      };
+    }),
+  })),
+
+  recallPlayer: (teamId, playerId, newX, newY) => set((state) => ({
+    teams: state.teams.map(t => {
+      if (t.id !== teamId) return t;
+      return {
+        ...t,
+        players: t.players.map(p =>
+          p.id === playerId
+            ? { ...p, status: 'alive' as const, deathType: null, isLocked: false, x: newX, y: newY }
+            : p
+        ),
+      };
+    }),
+    recallingPlayerId: null,
+    recallingTeamId: null,
+  })),
+
+  recallingPlayerId: null,
+  recallingTeamId: null,
+  setRecallingPlayer: (playerId, teamId) => set({ recallingPlayerId: playerId, recallingTeamId: teamId }),
+
   isAnimating: false,
   setAnimating: (val) => set({ isAnimating: val }),
+
+  stagedFight: { step: 'selectP1', p1Id: null, p1TeamId: null, p1Path: null, p2Id: null, p2TeamId: null, p2Path: null, outcome: null },
+  setStagedFight: (fight) => set((state) => ({ stagedFight: { ...state.stagedFight, ...fight } })),
+  clearStagedFight: () => set({ stagedFight: { step: 'selectP1', p1Id: null, p1TeamId: null, p1Path: null, p2Id: null, p2TeamId: null, p2Path: null, outcome: null } }),
+
+  stagedRevive: { medicId: null, medicTeamId: null, targetId: null, targetTeamId: null },
+  setStagedRevive: (r) => set((state) => ({ stagedRevive: { ...state.stagedRevive, ...r } })),
+  clearStagedRevive: () => set({ stagedRevive: { medicId: null, medicTeamId: null, targetId: null, targetTeamId: null } }),
 
   savedTeams: [],
   loadSavedTeams: () => {
@@ -379,7 +497,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       id: Math.random().toString(36).substring(2, 9),
       name: p.name.trim() || `Player ${idx + 1}`,
       x: 0,
-      y: 0
+      y: 0,
+      status: 'alive' as const,
+      deathType: null,
     }));
     const newTeam: Team = { ...teamData, id: teamId, players };
     const newSaved = [...state.savedTeams, newTeam];

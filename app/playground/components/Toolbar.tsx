@@ -6,7 +6,7 @@ import {
   Pointer, Hand, Pen, Zap, Circle, Square,
   ZoomIn, ZoomOut, Trash2,
   Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors,
-  Route, Lock, Unlock, ImageOff
+  Route, Lock, Unlock, ImageOff, Swords, HeartPulse
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
@@ -64,6 +64,8 @@ export default function Toolbar() {
     toggleElementLock,
     croppingElementId, setCroppingElementId,
     teams, clearAllAnimationPaths,
+    stagedFight, clearStagedFight,
+    clearStagedRevive,
   } = useBoardStore();
 
   const { bindings, loadBindings } = useHotkeyStore();
@@ -232,6 +234,26 @@ export default function Toolbar() {
           </button>
         )}
       </div>
+
+      {/* Fight tool */}
+      <ToolBtn tool="fight" activeTool={activeTool} onClick={(t) => {
+        if (activeTool === 'fight') {
+          clearStagedFight();
+          setTool('select');
+        } else {
+          setTool(t as Tool);
+        }
+      }} icon={Swords} label="Fight Tool" />
+
+      {/* Revive tool */}
+      <ToolBtn tool="revive" activeTool={activeTool} onClick={(t) => {
+        if (activeTool === 'revive') {
+          clearStagedRevive();
+          setTool('select');
+        } else {
+          setTool(t as Tool);
+        }
+      }} icon={HeartPulse} label="Revive Tool" />
 
       {/* Lock button — locks selected element directly; enters lock-mode if nothing selected */}
       <button
