@@ -3,10 +3,13 @@ import { create } from 'zustand';
 export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'laser' | 'circle' | 'rectangle' | 'path' | 'lock' | 'fight' | 'revive';
 
 export interface StagedFight {
-  attackerId: string | null;
-  attackerTeamId: string | null;
-  victimId: string | null;
-  victimTeamId: string | null;
+  step: 'selectP1' | 'drawP1' | 'selectP2' | 'drawP2' | 'ready';
+  p1Id: string | null;
+  p1TeamId: string | null;
+  p1Path: number[] | null;
+  p2Id: string | null;
+  p2TeamId: string | null;
+  p2Path: number[] | null;
   outcome: 'knocked' | 'dead' | null;
 }
 
@@ -459,9 +462,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   isAnimating: false,
   setAnimating: (val) => set({ isAnimating: val }),
 
-  stagedFight: { attackerId: null, attackerTeamId: null, victimId: null, victimTeamId: null, outcome: null },
+  stagedFight: { step: 'selectP1', p1Id: null, p1TeamId: null, p1Path: null, p2Id: null, p2TeamId: null, p2Path: null, outcome: null },
   setStagedFight: (fight) => set((state) => ({ stagedFight: { ...state.stagedFight, ...fight } })),
-  clearStagedFight: () => set({ stagedFight: { attackerId: null, attackerTeamId: null, victimId: null, victimTeamId: null, outcome: null } }),
+  clearStagedFight: () => set({ stagedFight: { step: 'selectP1', p1Id: null, p1TeamId: null, p1Path: null, p2Id: null, p2TeamId: null, p2Path: null, outcome: null } }),
 
   stagedRevive: { medicId: null, medicTeamId: null, targetId: null, targetTeamId: null },
   setStagedRevive: (r) => set((state) => ({ stagedRevive: { ...state.stagedRevive, ...r } })),

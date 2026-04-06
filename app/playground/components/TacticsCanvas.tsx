@@ -85,6 +85,16 @@ const PlayerNode = React.memo(function PlayerNode({
       : player.isLocked ? '#888888' : team.themeColor;
 
   const groupOpacity = isDead ? 0.4 : 1;
+  const groupRef = useRef<Konva.Group>(null);
+
+  // Force Konva node opacity in sync with React state — overrides any stale GSAP values
+  useEffect(() => {
+    if (groupRef.current) {
+      const target = isDead ? 0.4 : 1;
+      groupRef.current.opacity(target);
+      groupRef.current.getLayer()?.batchDraw();
+    }
+  }, [player.status, isDead]);
 
   const handleClick = (e: KonvaEventObject<Event>) => {
     e.cancelBubble = true;
@@ -97,6 +107,7 @@ const PlayerNode = React.memo(function PlayerNode({
 
   return (
     <Group
+      ref={groupRef}
       id={`player-${player.id}`}
       x={player.x}
       y={player.y}
@@ -223,6 +234,10 @@ export default function TacticsCanvas() {
   const [draftPath, setDraftPath] = useState<number[]>([]);
   const [isDrawingPath, setIsDrawingPath] = useState(false);
 
+  // Fight path drawing state (for integrated fight+path workflow)
+  const [fightDraftPath, setFightDraftPath] = useState<number[]>([]);
+  const [isDrawingFightPath, setIsDrawingFightPath] = useState(false);
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     playerId: string; teamId: string; screenX: number; screenY: number; status: string;
@@ -275,6 +290,8 @@ export default function TacticsCanvas() {
         setPathTargetTeamId(null);
         setDraftPath([]);
         setIsDrawingPath(false);
+        setFightDraftPath([]);
+        setIsDrawingFightPath(false);
         setContextMenu(null);
         setRecallingPlayer(null, null);
         clearStagedFight();
@@ -348,6 +365,15 @@ export default function TacticsCanvas() {
         setPathTargetPlayerId(null);
         setPathTargetTeamId(null);
       }
+      // Fight tool: clicking empty canvas during draw steps → skip drawing, advance step
+      if (activeTool === 'fight' && !isDrawingFightPath) {
+        if (stagedFight.step === 'drawP1') {
+          setStagedFight({ p1Path: null, step: 'selectP2' });
+        } else if (stagedFight.step === 'drawP2') {
+          setStagedFight({ p2Path: null, step: 'ready' });
+          setShowOutcomePicker(true);
+        }
+      }
     }
   };
 
@@ -391,6 +417,15 @@ export default function TacticsCanvas() {
       return;
     }
 
+    // Fight tool: path drawing during drawP1/drawP2 steps
+    if (activeTool === 'fight') {
+      if (stagedFight.step === 'drawP1' || stagedFight.step === 'drawP2') {
+        setIsDrawingFightPath(true);
+        setFightDraftPath([pointer.x, pointer.y]);
+      }
+      return; // fight tool never creates elements
+    }
+
     setIsDrawing(true);
     const id = generateId();
     setCurrentId(id);
@@ -430,6 +465,12 @@ export default function TacticsCanvas() {
       return;
     }
 
+    // Fight path drag
+    if (activeTool === 'fight' && isDrawingFightPath) {
+      setFightDraftPath(prev => [...prev, pointer.x, pointer.y]);
+      return;
+    }
+
     if (!isDrawing || !currentId) return;
     if (activeTool === 'pan' || activeTool === 'select') return;
 
@@ -462,6 +503,20 @@ export default function TacticsCanvas() {
       setDraftPath([]);
       setPathTargetPlayerId(null);
       setPathTargetTeamId(null);
+      return;
+    }
+
+    // Fight tool: commit drawn fight path
+    if (activeTool === 'fight' && isDrawingFightPath) {
+      setIsDrawingFightPath(false);
+      const pathData = fightDraftPath.length >= 4 ? fightDraftPath : null;
+      if (stagedFight.step === 'drawP1') {
+        setStagedFight({ p1Path: pathData, step: 'selectP2' });
+      } else if (stagedFight.step === 'drawP2') {
+        setStagedFight({ p2Path: pathData, step: 'ready' });
+        setShowOutcomePicker(true);
+      }
+      setFightDraftPath([]);
       return;
     }
 
@@ -602,31 +657,28 @@ export default function TacticsCanvas() {
   // ── ADVANCED FIGHT ANIMATION ──────────────────────────────────────────────
   const playAdvancedFight = useCallback(() => {
     if (isAnimating) return;
-    const { attackerId, attackerTeamId, victimId, victimTeamId, outcome } = stagedFight;
-    if (!attackerId || !victimId || !outcome || !attackerTeamId || !victimTeamId) return;
+    const { p1Id, p1TeamId, p2Id, p2TeamId, p1Path: rawP1Path, p2Path: rawP2Path, outcome } = stagedFight;
+    if (!p1Id || !p2Id || !outcome || !p1TeamId || !p2TeamId) return;
 
     const stage = stageRef.current;
     const tmpLayer = temporaryLayerRef.current;
     if (!stage || !tmpLayer) return;
 
-    const p1Ref = stage.findOne(`#player-${attackerId}`) as Konva.Group | undefined;
-    const p2Ref = stage.findOne(`#player-${victimId}`) as Konva.Group | undefined;
+    const p1Ref = stage.findOne(`#player-${p1Id}`) as Konva.Group | undefined;
+    const p2Ref = stage.findOne(`#player-${p2Id}`) as Konva.Group | undefined;
     if (!p1Ref || !p2Ref) return;
 
-    // Gather animation paths
-    const attackerPlayer = teams.flatMap(t => t.players).find(p => p.id === attackerId);
-    const victimPlayer = teams.flatMap(t => t.players).find(p => p.id === victimId);
-
+    // Build waypoint arrays from stagedFight paths
     const p1Path: Array<{ x: number; y: number }> = [];
-    if (attackerPlayer?.animationPath && attackerPlayer.animationPath.length >= 4) {
-      for (let i = 0; i < attackerPlayer.animationPath.length - 1; i += 2) {
-        p1Path.push({ x: attackerPlayer.animationPath[i], y: attackerPlayer.animationPath[i + 1] });
+    if (rawP1Path && rawP1Path.length >= 4) {
+      for (let i = 0; i < rawP1Path.length - 1; i += 2) {
+        p1Path.push({ x: rawP1Path[i], y: rawP1Path[i + 1] });
       }
     }
     const p2Path: Array<{ x: number; y: number }> = [];
-    if (victimPlayer?.animationPath && victimPlayer.animationPath.length >= 4) {
-      for (let i = 0; i < victimPlayer.animationPath.length - 1; i += 2) {
-        p2Path.push({ x: victimPlayer.animationPath[i], y: victimPlayer.animationPath[i + 1] });
+    if (rawP2Path && rawP2Path.length >= 4) {
+      for (let i = 0; i < rawP2Path.length - 1; i += 2) {
+        p2Path.push({ x: rawP2Path[i], y: rawP2Path[i + 1] });
       }
     }
 
@@ -642,11 +694,16 @@ export default function TacticsCanvas() {
         tempNodes.forEach(n => { n.destroy(); });
         tmpLayer.batchDraw();
 
-        // Apply outcome to Zustand ONLY at the very end
+        // CRITICAL ORDER: Persist final positions FIRST, then apply status.
+        // This prevents the re-render from snapping nodes back to old coords.
+        updatePlayerPosition(p1TeamId, p1Id, p1Ref.x(), p1Ref.y());
+        updatePlayerPosition(p2TeamId, p2Id, p2Ref.x(), p2Ref.y());
+
+        // Now apply outcome to Zustand (triggers re-render with correct coords)
         if (outcome === 'knocked') {
-          knockPlayer(victimTeamId, victimId);
+          knockPlayer(p2TeamId, p2Id);
         } else {
-          eliminatePlayer(victimTeamId, victimId);
+          eliminatePlayer(p2TeamId, p2Id);
         }
 
         clearStagedFight();
@@ -659,32 +716,50 @@ export default function TacticsCanvas() {
     const moveDur2 = p2Path.length >= 2 ? animateAlongPath(tl, p2Ref, p2Path, 0) : 0;
     const moveEnd = Math.max(moveDur1, moveDur2, 0.1);
 
-    // ── Phase 2: Aiming — draw imperative Konva Arrows ────────────────────
+    // ── Phase 2: Aiming — small arrows at each player's edge (NO connecting line) ──
+    const ARROW_LEN = 30;  // length of aiming arrow in px
+    const PLAYER_R = 18;   // slightly outside the player circle radius
+
     tl.call(() => {
       const ax = p1Ref.x(), ay = p1Ref.y();
       const vx = p2Ref.x(), vy = p2Ref.y();
 
+      // Angle from P1 → P2
+      const angle1to2 = Math.atan2(vy - ay, vx - ax);
+      // Angle from P2 → P1
+      const angle2to1 = Math.atan2(ay - vy, ax - vx);
+
+      // Arrow 1: starts at edge of P1 circle, points toward P2
+      const a1StartX = ax + Math.cos(angle1to2) * PLAYER_R;
+      const a1StartY = ay + Math.sin(angle1to2) * PLAYER_R;
+      const a1EndX   = ax + Math.cos(angle1to2) * (PLAYER_R + ARROW_LEN);
+      const a1EndY   = ay + Math.sin(angle1to2) * (PLAYER_R + ARROW_LEN);
+
+      // Arrow 2: starts at edge of P2 circle, points toward P1
+      const a2StartX = vx + Math.cos(angle2to1) * PLAYER_R;
+      const a2StartY = vy + Math.sin(angle2to1) * PLAYER_R;
+      const a2EndX   = vx + Math.cos(angle2to1) * (PLAYER_R + ARROW_LEN);
+      const a2EndY   = vy + Math.sin(angle2to1) * (PLAYER_R + ARROW_LEN);
+
       const arrow1 = new Konva.Arrow({
-        points: [ax, ay, vx, vy],
+        points: [a1StartX, a1StartY, a1EndX, a1EndY],
         stroke: '#FF3B30',
-        strokeWidth: 2,
+        strokeWidth: 2.5,
         fill: '#FF3B30',
-        pointerLength: 10,
-        pointerWidth: 7,
+        pointerLength: 8,
+        pointerWidth: 6,
         opacity: 0,
-        dash: [6, 3],
         listening: false,
         name: 'fight-temp',
       });
       const arrow2 = new Konva.Arrow({
-        points: [vx, vy, ax, ay],
+        points: [a2StartX, a2StartY, a2EndX, a2EndY],
         stroke: '#FF6B6B',
-        strokeWidth: 2,
+        strokeWidth: 2.5,
         fill: '#FF6B6B',
-        pointerLength: 10,
-        pointerWidth: 7,
+        pointerLength: 8,
+        pointerWidth: 6,
         opacity: 0,
-        dash: [6, 3],
         listening: false,
         name: 'fight-temp',
       });
@@ -695,7 +770,7 @@ export default function TacticsCanvas() {
 
       // Fade arrows in
       gsap.to([arrow1, arrow2], {
-        opacity: 0.85,
+        opacity: 0.9,
         duration: 0.3,
         onUpdate: () => { tmpLayer.batchDraw(); },
       });
@@ -755,10 +830,10 @@ export default function TacticsCanvas() {
       }, [], t0);
     }
 
-    // ── Phase 4: Outcome ──────────────────────────────────────────────────
+    // ── Phase 4: Cleanup & Outcome ────────────────────────────────────────
     const outcomeStart = firingStart + tracerCount * 0.12 + 0.15;
 
-    // Fade out arrows
+    // Fade out aiming arrows
     tl.call(() => {
       const arrows = tmpLayer.find('.fight-temp');
       gsap.to(arrows.map(a => a), {
@@ -768,46 +843,68 @@ export default function TacticsCanvas() {
       });
     }, [], outcomeStart);
 
-    // Shake victim
-    const victimOrigX = p2Ref.x();
-    const shakeProxy = { offset: 0 };
-    tl.to(shakeProxy, {
-      offset: 1,
-      duration: 0.4,
-      ease: 'none',
-      onUpdate: () => {
-        const shake = Math.sin(shakeProxy.offset * Math.PI * 10) * 5;
-        p2Ref.x(victimOrigX + shake);
-        p2Ref.getLayer()?.batchDraw();
-      },
-      onComplete: () => {
-        p2Ref.x(victimOrigX);
-        p2Ref.getLayer()?.batchDraw();
-      },
-    }, outcomeStart);
+    // Shake + knockback + visual outcome — all wrapped in tl.call() to read
+    // positions at RUNTIME (not setup time), preventing snap-back if P2 moved.
+    tl.call(() => {
+      const curX = p2Ref.x();
+      const curY = p2Ref.y();
 
-    // Visual transition on victim
-    if (outcome === 'dead') {
-      tl.to(p2Ref, {
-        opacity: 0.4,
-        duration: 0.4,
-        onUpdate: () => { p2Ref.getLayer()?.batchDraw(); },
-      }, outcomeStart + 0.3);
-    } else {
-      // Knocked: fast red-flash opacity pulse
-      tl.to(p2Ref, {
-        opacity: 0.4,
-        duration: 0.12,
-        yoyo: true,
-        repeat: 5,
-        onUpdate: () => { p2Ref.getLayer()?.batchDraw(); },
-        onComplete: () => {
-          p2Ref.opacity(1);
+      // Shake
+      const shakeProxy = { offset: 0 };
+      gsap.to(shakeProxy, {
+        offset: 1,
+        duration: 0.35,
+        ease: 'none',
+        onUpdate: () => {
+          const shake = Math.sin(shakeProxy.offset * Math.PI * 8) * 3;
+          p2Ref.x(curX + shake);
           p2Ref.getLayer()?.batchDraw();
         },
-      }, outcomeStart + 0.3);
-    }
-  }, [isAnimating, stagedFight, teams, setAnimating, knockPlayer, eliminatePlayer, clearStagedFight]);
+        onComplete: () => {
+          // Minimal knockback: 3px push in attacker → victim direction
+          const angle = Math.atan2(curY - p1Ref.y(), curX - p1Ref.x());
+          const knockX = curX + Math.cos(angle) * 3;
+          const knockY = curY + Math.sin(angle) * 3;
+
+          const knockProxy = { x: curX, y: curY };
+          gsap.to(knockProxy, {
+            x: knockX,
+            y: knockY,
+            duration: 0.12,
+            ease: 'power2.out',
+            onUpdate: () => {
+              p2Ref.x(knockProxy.x);
+              p2Ref.y(knockProxy.y);
+              p2Ref.getLayer()?.batchDraw();
+            },
+          });
+        },
+      });
+
+      // Visual transition (slightly delayed)
+      if (outcome === 'dead') {
+        gsap.to(p2Ref, {
+          opacity: 0.4,
+          duration: 0.4,
+          delay: 0.2,
+          onUpdate: () => { p2Ref.getLayer()?.batchDraw(); },
+        });
+      } else {
+        gsap.to(p2Ref, {
+          opacity: 0.4,
+          duration: 0.12,
+          delay: 0.2,
+          yoyo: true,
+          repeat: 5,
+          onUpdate: () => { p2Ref.getLayer()?.batchDraw(); },
+          onComplete: () => {
+            p2Ref.opacity(1);
+            p2Ref.getLayer()?.batchDraw();
+          },
+        });
+      }
+    }, [], outcomeStart);
+  }, [isAnimating, stagedFight, teams, setAnimating, knockPlayer, eliminatePlayer, clearStagedFight, updatePlayerPosition]);
 
   // ── ADVANCED REVIVE ANIMATION ─────────────────────────────────────────────
   const playAdvancedRevive = useCallback(() => {
@@ -824,6 +921,10 @@ export default function TacticsCanvas() {
     if (!p3Ref || !p4Ref) return;
 
     // Build path from medic to target
+    const PLAYER_RADIUS = 20;
+    const DESIRED_GAP = 5;
+    const STOP_DIST = 2 * PLAYER_RADIUS + DESIRED_GAP; // center-to-center minimum
+
     const medicPlayer = teams.flatMap(t => t.players).find(p => p.id === medicId);
     const p3Path: Array<{ x: number; y: number }> = [];
     if (medicPlayer?.animationPath && medicPlayer.animationPath.length >= 4) {
@@ -831,10 +932,33 @@ export default function TacticsCanvas() {
         p3Path.push({ x: medicPlayer.animationPath[i], y: medicPlayer.animationPath[i + 1] });
       }
     }
-    // If no drawn path, auto-generate a direct line to the target
+
+    // Clamp the final waypoint so medic stops STOP_DIST away from P4's center
+    const p4x = p4Ref.x(), p4y = p4Ref.y();
+    const clampEndpoint = (path: Array<{ x: number; y: number }>) => {
+      const last = path[path.length - 1];
+      const dx = last.x - p4x, dy = last.y - p4y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < STOP_DIST) {
+        // Push the endpoint back along the approach angle
+        const angle = Math.atan2(p4y - last.y, p4x - last.x);
+        path[path.length - 1] = {
+          x: p4x - Math.cos(angle) * STOP_DIST,
+          y: p4y - Math.sin(angle) * STOP_DIST,
+        };
+      }
+    };
+
+    // If no drawn path, auto-generate a direct line stopping short of target
     if (p3Path.length < 2) {
+      const angle = Math.atan2(p4y - p3Ref.y(), p4x - p3Ref.x());
       p3Path.push({ x: p3Ref.x(), y: p3Ref.y() });
-      p3Path.push({ x: p4Ref.x(), y: p4Ref.y() });
+      p3Path.push({
+        x: p4x - Math.cos(angle) * STOP_DIST,
+        y: p4y - Math.sin(angle) * STOP_DIST,
+      });
+    } else {
+      clampEndpoint(p3Path);
     }
 
     setAnimating(true);
@@ -846,10 +970,11 @@ export default function TacticsCanvas() {
         tempNodes.forEach(n => { n.destroy(); });
         tmpLayer.batchDraw();
 
-        // Zustand state update — revive the target
-        revivePlayer(targetTeamId, targetId);
-        // Persist medic's final position
+        // CRITICAL ORDER: Persist medic's final position FIRST
         updatePlayerPosition(medicTeamId, medicId, p3Ref.x(), p3Ref.y());
+
+        // Then revive the target (triggers re-render with correct coords)
+        revivePlayer(targetTeamId, targetId);
 
         clearStagedRevive();
         setAnimating(false);
@@ -949,22 +1074,26 @@ export default function TacticsCanvas() {
         onUpdate: () => { tmpLayer.batchDraw(); },
       });
 
-      // Flash the victim back to life
-      p4Ref.opacity(1);
+      // Flash the victim back to life, explicitly ending at full opacity
       gsap.fromTo(p4Ref, { opacity: 0.3 }, {
         opacity: 1,
         duration: 0.3,
         yoyo: true,
         repeat: 1,
         onUpdate: () => { p4Ref.getLayer()?.batchDraw(); },
+        onComplete: () => {
+          // Guarantee the Konva node is at full opacity after yoyo
+          p4Ref.opacity(1);
+          p4Ref.getLayer()?.batchDraw();
+        },
       });
     }, [], arrivalTime + REVIVE_DURATION + 0.1);
 
   }, [isAnimating, stagedRevive, teams, setAnimating, revivePlayer, updatePlayerPosition, clearStagedRevive]);
 
   // Fight staged check
-  const isFightStaged = !!(stagedFight.attackerId && stagedFight.victimId && stagedFight.outcome);
-  const isFightPartial = !!(stagedFight.attackerId && !stagedFight.victimId);
+  const isFightStaged = !!(stagedFight.p1Id && stagedFight.p2Id && stagedFight.outcome);
+  const isFightPartial = stagedFight.step !== 'selectP1' && stagedFight.step !== 'ready';
 
   // Revive staged check
   const isReviveStaged = !!(stagedRevive.medicId && stagedRevive.targetId);
@@ -1319,10 +1448,16 @@ export default function TacticsCanvas() {
                   }}
                   onFightClick={() => {
                     if (player.status !== 'alive') return; // only alive players
-                    if (!stagedFight.attackerId) {
-                      setStagedFight({ attackerId: player.id, attackerTeamId: team.id });
-                    } else if (stagedFight.attackerId !== player.id && !stagedFight.victimId) {
-                      setStagedFight({ victimId: player.id, victimTeamId: team.id });
+                    if (stagedFight.step === 'selectP1') {
+                      setStagedFight({ p1Id: player.id, p1TeamId: team.id, step: 'drawP1' });
+                    } else if (stagedFight.step === 'drawP1' && player.id !== stagedFight.p1Id) {
+                      // Skip P1 draw, this click selects P2 directly
+                      setStagedFight({ p1Path: null, p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
+                    } else if (stagedFight.step === 'selectP2' && player.id !== stagedFight.p1Id) {
+                      setStagedFight({ p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
+                    } else if (stagedFight.step === 'drawP2' && player.id !== stagedFight.p1Id && player.id !== stagedFight.p2Id) {
+                      // Skip P2 draw, advance to ready
+                      setStagedFight({ p2Path: null, step: 'ready' });
                       setShowOutcomePicker(true);
                     }
                   }}
@@ -1361,25 +1496,86 @@ export default function TacticsCanvas() {
         {/* Temporary layer for imperative Konva nodes (fight arrows, tracers, revive arcs) */}
         <Layer ref={temporaryLayerRef} id="temporaryEffects" listening={false} />
 
-        {/* Staging line between attacker & victim */}
-        {stagedFight.attackerId && stagedFight.victimId && !isAnimating && (() => {
-          const atk = teams.flatMap(t => t.players).find(p => p.id === stagedFight.attackerId);
-          const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.victimId);
+        {/* Staging arrows at each player's edge (NO connecting line) */}
+        {stagedFight.p1Id && stagedFight.p2Id && !isAnimating && (() => {
+          const atk = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p1Id);
+          const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p2Id);
           if (!atk || !vic) return null;
+          const angle1 = Math.atan2(vic.y - atk.y, vic.x - atk.x);
+          const angle2 = Math.atan2(atk.y - vic.y, atk.x - vic.x);
+          const R = 18, L = 28;
           return (
             <Layer listening={false}>
-              <Line
-                points={[atk.x, atk.y, vic.x, vic.y]}
-                stroke="#FF3B30"
-                strokeWidth={2}
-                opacity={0.5}
-                dash={[8, 6]}
-                lineCap="round"
-                listening={false}
-                strokeScaleEnabled={false}
+              <Arrow
+                points={[
+                  atk.x + Math.cos(angle1) * R, atk.y + Math.sin(angle1) * R,
+                  atk.x + Math.cos(angle1) * (R + L), atk.y + Math.sin(angle1) * (R + L),
+                ]}
+                stroke="#FF3B30" fill="#FF3B30" strokeWidth={2}
+                pointerLength={7} pointerWidth={5} opacity={0.65}
+                listening={false} strokeScaleEnabled={false}
+              />
+              <Arrow
+                points={[
+                  vic.x + Math.cos(angle2) * R, vic.y + Math.sin(angle2) * R,
+                  vic.x + Math.cos(angle2) * (R + L), vic.y + Math.sin(angle2) * (R + L),
+                ]}
+                stroke="#FF6B6B" fill="#FF6B6B" strokeWidth={2}
+                pointerLength={7} pointerWidth={5} opacity={0.65}
+                listening={false} strokeScaleEnabled={false}
               />
             </Layer>
           );
+        })()}
+
+        {/* Fight draft path while drawing */}
+        {isDrawingFightPath && fightDraftPath.length >= 4 && (() => {
+          const fightTeamId = stagedFight.step === 'drawP1' ? stagedFight.p1TeamId : stagedFight.p2TeamId;
+          const team = fightTeamId ? teams.find(t => t.id === fightTeamId) : null;
+          const color = team?.themeColor || '#FF3B30';
+          return (
+            <Layer listening={false}>
+              <Line
+                points={fightDraftPath}
+                stroke={color}
+                strokeWidth={2}
+                opacity={0.6}
+                dash={[6, 4]}
+                lineCap="round"
+                lineJoin="round"
+                listening={false}
+                strokeScaleEnabled={false}
+                tension={0.3}
+              />
+            </Layer>
+          );
+        })()}
+
+        {/* Fight staged paths preview (saved p1Path / p2Path) */}
+        {!isAnimating && (() => {
+          const nodes: React.ReactNode[] = [];
+          if (stagedFight.p1Path && stagedFight.p1Path.length >= 4) {
+            const t = stagedFight.p1TeamId ? teams.find(tm => tm.id === stagedFight.p1TeamId) : null;
+            nodes.push(
+              <Line key="fp1" points={stagedFight.p1Path}
+                stroke={t?.themeColor || '#FF3B30'} strokeWidth={2}
+                opacity={0.35} dash={[8, 5]} lineCap="round"
+                listening={false} strokeScaleEnabled={false} tension={0.3}
+              />
+            );
+          }
+          if (stagedFight.p2Path && stagedFight.p2Path.length >= 4) {
+            const t = stagedFight.p2TeamId ? teams.find(tm => tm.id === stagedFight.p2TeamId) : null;
+            nodes.push(
+              <Line key="fp2" points={stagedFight.p2Path}
+                stroke={t?.themeColor || '#FF6B6B'} strokeWidth={2}
+                opacity={0.35} dash={[8, 5]} lineCap="round"
+                listening={false} strokeScaleEnabled={false} tension={0.3}
+              />
+            );
+          }
+          if (nodes.length === 0) return null;
+          return <Layer listening={false}>{nodes}</Layer>;
         })()}
 
         {/* Eraser cursor overlay */}
@@ -1434,18 +1630,22 @@ export default function TacticsCanvas() {
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
           <div className="bg-[#0A0705CC] backdrop-blur-md border border-[#FF3B30]/40 px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5">
             <div className="w-2 h-2 rounded-full bg-[#FF3B30] animate-pulse" />
-            {!stagedFight.attackerId
+            {stagedFight.step === 'selectP1'
               ? <span className="text-[#FF6B6B] text-xs font-sora">Fight Tool — Click the <b>Attacker</b></span>
-              : !stagedFight.victimId
-                ? <span className="text-[#FF6B6B] text-xs font-sora font-semibold">Attacker selected — now click the <b>Victim</b></span>
-                : !stagedFight.outcome
-                  ? <span className="text-[#FFD700] text-xs font-sora font-semibold">Choose the outcome above</span>
-                  : <span className="text-[#34C759] text-xs font-sora font-semibold">Fight staged! Click Play Fight ▶</span>
+              : stagedFight.step === 'drawP1'
+                ? <span className="text-[#FF6B6B] text-xs font-sora font-semibold">Drag to draw P1 path, or click <b>Victim</b> to skip</span>
+                : stagedFight.step === 'selectP2'
+                  ? <span className="text-[#FF6B6B] text-xs font-sora font-semibold">Now click the <b>Victim</b></span>
+                  : stagedFight.step === 'drawP2'
+                    ? <span className="text-[#FF6B6B] text-xs font-sora font-semibold">Drag to draw P2 path, or click canvas to skip</span>
+                    : stagedFight.outcome
+                      ? <span className="text-[#34C759] text-xs font-sora font-semibold">Fight staged! Click Play Fight ▶</span>
+                      : <span className="text-[#FFD700] text-xs font-sora font-semibold">Choose the outcome above</span>
             }
-            {stagedFight.attackerId && (
+            {stagedFight.step !== 'selectP1' && (
               <button
                 className="ml-2 text-[#7A6A55] hover:text-[#FF3B30] text-xs pointer-events-auto"
-                onClick={() => clearStagedFight()}
+                onClick={() => { clearStagedFight(); setShowOutcomePicker(false); setFightDraftPath([]); setIsDrawingFightPath(false); }}
               >Cancel</button>
             )}
           </div>
@@ -1453,8 +1653,8 @@ export default function TacticsCanvas() {
       )}
 
       {/* Fight tool: Outcome picker popover */}
-      {showOutcomePicker && stagedFight.attackerId && stagedFight.victimId && !stagedFight.outcome && (() => {
-        const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.victimId);
+      {showOutcomePicker && stagedFight.p1Id && stagedFight.p2Id && !stagedFight.outcome && (() => {
+        const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p2Id);
         if (!vic) return null;
         const sx = vic.x * zoom + stagePosition.x;
         const sy = vic.y * zoom + stagePosition.y;
