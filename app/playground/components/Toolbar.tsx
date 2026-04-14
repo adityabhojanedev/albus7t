@@ -3,12 +3,13 @@
 import { useBoardStore, Tool } from "../store/useBoardStore";
 import { useHotkeyStore, formatKeyDisplay } from "../store/useHotkeyStore";
 import {
-  Pointer, Hand, Pen, Zap, Circle, Square,
-  ZoomIn, ZoomOut, Trash2,
+  Pointer, Hand, Pen, Zap, Circle, Square, Type,
+  ZoomIn, ZoomOut, Trash2, Download,
   Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors,
   Route, Lock, Unlock, ImageOff, Swords, HeartPulse
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useBoardStageRef } from "../hooks/useBoardStageRef";
 
 // ─── Tool Button ──────────────────────────────────────────────────────────────
 const ToolBtn = ({
@@ -52,6 +53,61 @@ const ToolBtn = ({
 // ─── Divider ──────────────────────────────────────────────────────────────────
 const Divider = () => <div className="w-px h-6 bg-[#2A1F15] mx-1 flex-shrink-0" />;
 
+// ─── Export Button ────────────────────────────────────────────────────────────
+function ExportButton() {
+  const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const stageRef = useBoardStageRef();
+
+  const doExport = async (format: 'png' | 'jpg' | 'pdf') => {
+    setExporting(true);
+    try {
+      const { exportAsPNG, exportAsJPG, exportAsPDF } = await import('../hooks/useExport');
+      if (format === 'png') exportAsPNG(stageRef);
+      else if (format === 'jpg') exportAsJPG(stageRef);
+      else await exportAsPDF(stageRef);
+    } finally {
+      setExporting(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        title="Export canvas"
+        className={`p-2 rounded-md transition-all duration-200 ${
+          open
+            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+        }`}
+      >
+        <Download size={20} />
+      </button>
+      {open && (
+        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[8px] shadow-2xl z-50 min-w-[150px] py-1">
+          <div className="px-3 py-1.5 border-b border-[#2A1F15]">
+            <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Export As</span>
+          </div>
+          {(['png', 'jpg', 'pdf'] as const).map(fmt => (
+            <button
+              key={fmt}
+              disabled={exporting}
+              onClick={() => doExport(fmt)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-sora text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A] transition-colors disabled:opacity-40"
+            >
+              <Download size={13} />
+              {fmt.toUpperCase()}
+              {fmt === 'pdf' && <span className="text-[#7A6A55] text-[9px] ml-auto">jsPDF</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Toolbar ─────────────────────────────────────────────────────────────
 export default function Toolbar() {
   const {
@@ -60,7 +116,7 @@ export default function Toolbar() {
     undo, redo, historyStep, history,
     eraserSize, setEraserSize, shapeFillType, toggleShapeFillType,
     strokeColor, setStrokeColor, strokeWidth, setStrokeWidth,
-    selectedElementId, removeElement, setSelectedElementId, elements, commitHistory,
+    selectedElementId, removeElement, setSelectedElementId, elements, updateElement, commitHistory,
     toggleElementLock,
     croppingElementId, setCroppingElementId,
     teams, clearAllAnimationPaths,
@@ -87,7 +143,12 @@ export default function Toolbar() {
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
   const isImageSelected = selectedElement?.type === 'image';
+  const isColoredElement = selectedElement && ['text', 'line', 'circle', 'rectangle'].includes(selectedElement.type);
   const isSelectedLocked = !!selectedElement?.isLocked;
+  const [showElementColorPicker, setShowElementColorPicker] = useState(false);
+
+  // Close element color picker when selection changes
+  useEffect(() => { setShowElementColorPicker(false); }, [selectedElementId]);
 
   const handleZoomIn = () => setZoom(Math.min(zoom * 1.2, 10));
   const handleZoomOut = () => setZoom(Math.max(zoom / 1.2, 0.1));
@@ -124,8 +185,21 @@ export default function Toolbar() {
 
   const colors = ['#C47C2B', '#E8A44A', '#FFFFFF', '#FF3B30', '#34C759', '#007AFF', '#A259FF'];
 
+  // Color change handler — also updates selected element color in real-time
+  const handleColorChange = (color: string) => {
+    setStrokeColor(color);
+    // If a text (or any drawing) element is selected, live-update its color
+    if (selectedElementId) {
+      const el = elements.find(e => e.id === selectedElementId);
+      if (el) {
+        updateElement(selectedElementId, { color });
+        commitHistory();
+      }
+    }
+  };
+
   const renderSettingsPopover = (showFillToggle = false) => (
-    <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[140px]">
+    <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]">
       <div className="w-full">
         <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Thickness: {strokeWidth}px</span>
         <input type="range" min="1" max="25" value={strokeWidth}
@@ -134,13 +208,28 @@ export default function Toolbar() {
       </div>
       <div className="w-full">
         <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Color</span>
-        <div className="flex gap-1.5 justify-center flex-wrap w-[120px]">
-          {colors.map(c => (
-            <button key={c} onClick={() => setStrokeColor(c)}
-              className={`w-4 h-4 rounded-full border ${strokeColor === c ? 'border-white scale-125' : 'border-black/50'} transition-transform`}
-              style={{ backgroundColor: c }} title={c}
+        <div className="flex items-center gap-2">
+          <label
+            className={`w-5 h-5 rounded-full border overflow-hidden cursor-pointer relative flex-shrink-0 transition-transform ${!colors.includes(strokeColor.toUpperCase()) && !colors.includes(strokeColor) ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'border-[#2A1F15] hover:scale-105'}`}
+            title="Custom Color"
+          >
+            <div className="absolute inset-0 rounded-full" style={{ background: 'conic-gradient(red, yellow, green, cyan, blue, magenta, red)' }} />
+            <input
+              type="color"
+              value={strokeColor}
+              onChange={(e) => handleColorChange(e.target.value)}
+              className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
             />
-          ))}
+          </label>
+          <div className="w-[1px] h-4 bg-[#2A1F15]"></div>
+          <div className="flex gap-1.5 justify-center flex-wrap">
+            {colors.map(c => (
+              <button key={c} onClick={() => handleColorChange(c)}
+                className={`w-4 h-4 rounded-full border ${strokeColor === c ? 'border-white scale-125' : 'border-black/50'} transition-transform`}
+                style={{ backgroundColor: c }} title={c}
+              />
+            ))}
+          </div>
         </div>
       </div>
       {showFillToggle && (
@@ -219,6 +308,46 @@ export default function Toolbar() {
         {openPopoverTool === 'rectangle' && renderSettingsPopover(true)}
       </div>
 
+      <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
+        <ToolBtn tool="text" activeTool={activeTool} onClick={handleToolClick} icon={Type} label="Text" shortcutKey={keyFor('text')} />
+        {openPopoverTool === 'text' && (
+          <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]">
+            <div className="w-full">
+              <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Font Size: {Math.max(16, strokeWidth * 5)}px</span>
+              <input type="range" min="1" max="25" value={strokeWidth}
+                onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                className="w-full accent-[#C47C2B]" />
+            </div>
+            <div className="w-full">
+              <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Color</span>
+              <div className="flex items-center gap-2">
+                <label
+                  className={`w-5 h-5 rounded-full border overflow-hidden cursor-pointer relative flex-shrink-0 transition-transform ${!colors.includes(strokeColor.toUpperCase()) && !colors.includes(strokeColor) ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'border-[#2A1F15] hover:scale-105'}`}
+                  title="Custom Color"
+                >
+                  <div className="absolute inset-0 rounded-full" style={{ background: 'conic-gradient(red, yellow, green, cyan, blue, magenta, red)' }} />
+                  <input
+                    type="color"
+                    value={strokeColor}
+                    onChange={(e) => handleColorChange(e.target.value)}
+                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                  />
+                </label>
+                <div className="w-[1px] h-4 bg-[#2A1F15]"></div>
+                <div className="flex gap-1.5 justify-center flex-wrap">
+                  {colors.map(c => (
+                    <button key={c} onClick={() => handleColorChange(c)}
+                      className={`w-4 h-4 rounded-full border ${strokeColor === c ? 'border-white scale-125' : 'border-black/50'} transition-transform`}
+                      style={{ backgroundColor: c }} title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Divider />
 
       {/* ── Group 3: Tactical tools ───────────────────────────── */}
@@ -272,10 +401,52 @@ export default function Toolbar() {
         {isSelectedLocked && selectedElementId ? <Unlock size={20} /> : <Lock size={20} />}
       </button>
 
-      {/* Context: image selected → show crop/delete */}
+      {/* Context: element selected → show color/crop/delete */}
       {selectedElementId && (
         <>
           <Divider />
+          {isColoredElement && (
+            <div className="relative">
+              <button
+                onClick={() => setShowElementColorPicker(!showElementColorPicker)}
+                title="Change element color"
+                className="p-2 rounded-md transition-all duration-200 hover:bg-[#2A1F15]"
+              >
+                <div
+                  className="w-5 h-5 rounded-full border-2 border-[#2A1F15]"
+                  style={{ backgroundColor: selectedElement?.color || strokeColor }}
+                />
+              </button>
+              {showElementColorPicker && (
+                <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl z-50 min-w-[160px]">
+                  <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Element Color</span>
+                  <div className="flex items-center gap-2">
+                    <label
+                      className={`w-5 h-5 rounded-full border overflow-hidden cursor-pointer relative flex-shrink-0 transition-transform ${!colors.includes((selectedElement?.color || '').toUpperCase()) && !colors.includes(selectedElement?.color || '') ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'border-[#2A1F15] hover:scale-105'}`}
+                      title="Custom Color"
+                    >
+                      <div className="absolute inset-0 rounded-full" style={{ background: 'conic-gradient(red, yellow, green, cyan, blue, magenta, red)' }} />
+                      <input
+                        type="color"
+                        value={selectedElement?.color || strokeColor}
+                        onChange={(e) => handleColorChange(e.target.value)}
+                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                      />
+                    </label>
+                    <div className="w-[1px] h-4 bg-[#2A1F15]"></div>
+                    <div className="flex gap-1.5 justify-center flex-wrap">
+                      {colors.map(c => (
+                        <button key={c} onClick={() => handleColorChange(c)}
+                          className={`w-4 h-4 rounded-full border ${(selectedElement?.color || strokeColor) === c ? 'border-white scale-125' : 'border-black/50'} transition-transform`}
+                          style={{ backgroundColor: c }} title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {isImageSelected && (
             <ToolBtn tool="crop" activeTool={undefined} onClick={() => setCroppingElementId(selectedElementId)} icon={Scissors} label="Crop Image" />
           )}
@@ -300,6 +471,10 @@ export default function Toolbar() {
       <button onClick={handleZoomOut} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomOut size={18} /></button>
       <span className="text-[#F5ECD7] font-inter text-xs font-medium w-11 text-center">{Math.round(zoom * 100)}%</span>
       <button onClick={handleZoomIn} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomIn size={18} /></button>
+      <Divider />
+
+      {/* ── Group 5: Export ────────────────────────────────────── */}
+      <ExportButton />
 
       <Divider />
 

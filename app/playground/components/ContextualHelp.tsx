@@ -71,6 +71,24 @@ export default function ContextualHelp() {
       borderColor = '#34C759';
       break;
 
+    case 'text':
+      content = (
+        <>
+          <span className="text-base mr-1">✏️</span>
+          <div>
+            <span className="text-[#F5ECD7] text-xs font-sora font-bold">Text Tool</span>
+            <ul className="text-[#A89A85] text-[11px] font-inter leading-snug mt-1 list-disc list-inside space-y-0.5">
+              <li>Click anywhere to add text</li>
+              <li>Type and press <b>Esc</b> or click away to commit</li>
+              <li>Double-click existing text to edit</li>
+              <li>Delete empty text to remove it</li>
+            </ul>
+          </div>
+        </>
+      );
+      borderColor = '#E8A44A';
+      break;
+
     default:
       return null;
   }

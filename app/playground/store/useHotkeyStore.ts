@@ -25,6 +25,7 @@ const DEFAULT_BINDINGS: HotkeyBinding[] = [
   { id: 'tool_laser',     label: 'Laser',      category: 'tool', defaultKey: 'l', currentKey: 'l', toolId: 'laser' },
   { id: 'tool_circle',    label: 'Circle',     category: 'tool', defaultKey: 'c', currentKey: 'c', toolId: 'circle' },
   { id: 'tool_rectangle', label: 'Rectangle',  category: 'tool', defaultKey: 'r', currentKey: 'r', toolId: 'rectangle' },
+  { id: 'tool_text',      label: 'Text',       category: 'tool', defaultKey: 'x', currentKey: 'x', toolId: 'text' },
   { id: 'tool_path',      label: 'Path Route', category: 'tool', defaultKey: 't', currentKey: 't', toolId: 'path' },
   { id: 'tool_lock',      label: 'Lock Mode',  category: 'tool', defaultKey: 'k', currentKey: 'k', toolId: 'lock' },
 
