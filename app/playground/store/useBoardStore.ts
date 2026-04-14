@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'laser' | 'circle' | 'rectangle' | 'path' | 'lock' | 'fight' | 'revive';
+export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'laser' | 'circle' | 'rectangle' | 'text' | 'path' | 'lock' | 'fight' | 'revive';
 
 export interface StagedFight {
   step: 'selectP1' | 'drawP1' | 'selectP2' | 'drawP2' | 'ready';
@@ -20,7 +20,7 @@ export interface Point {
 
 export interface DrawingElement {
   id: string;
-  type: 'line' | 'eraser' | 'circle' | 'rectangle' | 'image';
+  type: 'line' | 'eraser' | 'circle' | 'rectangle' | 'image' | 'text';
   points?: number[];
   x?: number;
   y?: number;
@@ -37,6 +37,9 @@ export interface DrawingElement {
   image?: HTMLImageElement;
   crop?: { x: number; y: number; width: number; height: number };
   isLocked?: boolean;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
 }
 
 export interface Player {

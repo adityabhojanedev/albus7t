@@ -7,6 +7,7 @@ import { Pen, Lock } from 'lucide-react';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import gsap from 'gsap';
+import { setBoardStageRef } from '../hooks/useBoardStageRef';
 
 // ─── Player Node ──────────────────────────────────────────────────────────────
 const PlayerNode = React.memo(function PlayerNode({
@@ -246,6 +247,35 @@ export default function TacticsCanvas() {
   // Fight/Revive UI state
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
 
+  // Text editing state
+  const [editingText, setEditingText] = useState<{
+    id: string | null;
+    x: number; y: number;
+    value: string;
+    fontSize: number;
+    color: string;
+    isNew: boolean;
+    scaleX: number;
+    scaleY: number;
+  } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Force-focus textarea after render — requestAnimationFrame ensures the DOM
+  // has settled and Konva stage pointer events have completed processing
+  useEffect(() => {
+    if (editingText && textareaRef.current) {
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [editingText]);
+
+  // Share stage ref with export hook
+  useEffect(() => {
+    if (stageRef.current) setBoardStageRef(stageRef.current);
+    return () => setBoardStageRef(null);
+  });
+
   // Resize canvas
   useEffect(() => {
     const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
@@ -398,6 +428,41 @@ export default function TacticsCanvas() {
   };
 
   // ── Pointer events ─────────────────────────────────────────────────────────
+  // ── Commit text editing ─────────────────────────────────────────────────────
+  const commitTextEditing = useCallback(() => {
+    if (!editingText) return;
+    const { id, x, y, value, fontSize, color, isNew, scaleX, scaleY } = editingText;
+    const trimmed = value.trim();
+    // Bake scale into fontSize so the rendered size matches what the user saw
+    const bakedFontSize = Math.round(fontSize * Math.max(scaleX, scaleY));
+    if (isNew) {
+      if (trimmed) {
+        addElement({
+          id: id || generateId(),
+          type: 'text',
+          x, y,
+          text: trimmed,
+          fontSize: bakedFontSize,
+          fontFamily: 'Inter, sans-serif',
+          color,
+          strokeWidth: 0,
+          scaleX: 1,
+          scaleY: 1,
+        });
+        commitHistory();
+      }
+    } else if (id) {
+      if (trimmed) {
+        updateElement(id, { text: trimmed, fontSize: bakedFontSize, scaleX: 1, scaleY: 1 });
+        commitHistory();
+      } else {
+        removeElement(id);
+        commitHistory();
+      }
+    }
+    setEditingText(null);
+  }, [editingText, addElement, updateElement, removeElement, commitHistory]);
+
   const handlePointerDown = (e: KonvaEventObject<PointerEvent>) => {
     if (activeTool === 'pan' || activeTool === 'select' || activeTool === 'lock') return;
     if (e.evt.button !== 0) return;
@@ -408,6 +473,27 @@ export default function TacticsCanvas() {
     if (!pointer) return;
 
     setSelectedElementId(null);
+
+    // Text tool — place editing textarea at click position
+    if (activeTool === 'text') {
+      // Prevent the stage from keeping pointer capture / focus
+      e.evt.preventDefault();
+      e.evt.stopPropagation();
+      // If already editing, commit current first
+      if (editingText) commitTextEditing();
+      setEditingText({
+        id: generateId(),
+        x: pointer.x,
+        y: pointer.y,
+        value: '',
+        fontSize: Math.max(16, strokeWidth * 5),
+        color: strokeColor,
+        isNew: true,
+        scaleX: 1,
+        scaleY: 1,
+      });
+      return;
+    }
 
     // Path drawing — only after a player target is chosen
     if (activeTool === 'path') {
@@ -1247,6 +1333,60 @@ export default function TacticsCanvas() {
         </Group>
       );
     }
+    if (el.type === 'text') {
+      const fontSize = el.fontSize || 20;
+      const fontFamily = el.fontFamily || 'Inter, sans-serif';
+      const isBeingEdited = editingText?.id === el.id;
+      if (isBeingEdited) return null; // hide while editing via textarea overlay
+
+      const enterEditMode = () => {
+        setEditingText({
+          id: el.id,
+          x: el.x || 0,
+          y: el.y || 0,
+          value: el.text || '',
+          fontSize,
+          color: el.color || '#F5ECD7',
+          isNew: false,
+          scaleX: el.scaleX || 1,
+          scaleY: el.scaleY || 1,
+        });
+      };
+
+      return (
+        <Group key={el.id} {...commonProps}
+          onClick={(e: KonvaEventObject<Event>) => {
+            e.cancelBubble = true;
+            if (activeTool === 'text') {
+              enterEditMode();
+            } else if (activeTool === 'select') {
+              setSelectedElementId(el.id);
+            }
+          }}
+          onDblClick={(e: KonvaEventObject<Event>) => {
+            e.cancelBubble = true;
+            enterEditMode();
+          }}
+          onDblTap={(e: KonvaEventObject<Event>) => {
+            e.cancelBubble = true;
+            enterEditMode();
+          }}
+        >
+          <Text
+            x={0} y={0}
+            text={el.text || ''}
+            fontSize={fontSize}
+            fontFamily={fontFamily}
+            fill={isLocked ? '#888888' : (el.color || '#F5ECD7')}
+            listening={true}
+            shadowColor="#0A0705"
+            shadowBlur={4}
+            shadowOffset={{ x: 1, y: 1 }}
+          />
+          {isLocked && <LockBadge bx={-10} by={-14} />}
+        </Group>
+      );
+    }
     return null;
   };
 
@@ -1255,6 +1395,7 @@ export default function TacticsCanvas() {
   if (activeTool === 'select') cursorClass = 'cursor-default';
   if (activeTool === 'eraser') cursorClass = 'cursor-none';
   if (activeTool === 'lock') cursorClass = 'cursor-pointer';
+  if (activeTool === 'text') cursorClass = 'cursor-text';
   if (activeTool === 'path') cursorClass = pathTargetPlayerId ? 'cursor-crosshair' : 'cursor-pointer';
   if (activeTool === 'fight') cursorClass = 'cursor-crosshair';
   if (activeTool === 'revive') cursorClass = 'cursor-crosshair';
@@ -1591,6 +1732,61 @@ export default function TacticsCanvas() {
           )}
         </Layer>
       </Stage>
+
+      {/* Text editing textarea overlay */}
+      {editingText && (() => {
+        // Convert canvas coordinates to screen coordinates
+        const screenX = editingText.x * zoom + stagePosition.x;
+        const screenY = editingText.y * zoom + stagePosition.y;
+        // Include element scale so textarea matches the visual size on canvas
+        const effectiveScale = Math.max(editingText.scaleX, editingText.scaleY);
+        const scaledFontSize = editingText.fontSize * effectiveScale * zoom;
+        return (
+          <div
+            className="absolute z-[100]"
+            style={{ left: screenX, top: screenY }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <textarea
+              ref={textareaRef}
+              value={editingText.value}
+              onChange={(e) => setEditingText(prev => prev ? { ...prev, value: e.target.value } : null)}
+              onBlur={(e) => {
+                // Don't commit if clicking within the text editing wrapper itself
+                const related = e.relatedTarget as HTMLElement | null;
+                if (related?.closest('[data-text-editor]')) return;
+                commitTextEditing();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  commitTextEditing();
+                }
+                // Block all keyboard events from bubbling to canvas shortcuts
+                e.stopPropagation();
+              }}
+              data-text-editor="true"
+              className="outline-none resize-none overflow-hidden"
+              style={{
+                minWidth: 80,
+                minHeight: scaledFontSize + 12,
+                fontSize: scaledFontSize,
+                fontFamily: 'Inter, sans-serif',
+                color: editingText.color,
+                background: 'rgba(10, 7, 5, 0.8)',
+                border: '2px solid rgba(196, 124, 43, 0.6)',
+                borderRadius: 6,
+                padding: '4px 8px',
+                lineHeight: 1.4,
+                letterSpacing: 0,
+                caretColor: '#C47C2B',
+                boxShadow: '0 0 20px rgba(196, 124, 43, 0.2)',
+              }}
+            />
+          </div>
+        );
+      })()}
 
       {/* Path mode: player target hint */}
       {activeTool === 'path' && !isDrawingPath && (
