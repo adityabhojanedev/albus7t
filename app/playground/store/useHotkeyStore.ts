@@ -30,12 +30,13 @@ const DEFAULT_BINDINGS: HotkeyBinding[] = [
   { id: 'tool_lock',      label: 'Lock Mode',  category: 'tool', defaultKey: 'k', currentKey: 'k', toolId: 'lock' },
 
   // Actions (modifier combos)
-  { id: 'action_undo',     label: 'Undo',           category: 'action', defaultKey: 'ctrl+z',       currentKey: 'ctrl+z',       actionId: 'undo' },
-  { id: 'action_redo',     label: 'Redo',           category: 'action', defaultKey: 'ctrl+shift+z', currentKey: 'ctrl+shift+z', actionId: 'redo' },
-  { id: 'action_delete',   label: 'Delete',         category: 'action', defaultKey: 'delete',       currentKey: 'delete',       actionId: 'delete' },
-  { id: 'action_deselect', label: 'Deselect All',   category: 'action', defaultKey: 'escape',       currentKey: 'escape',       actionId: 'deselect' },
-  { id: 'action_zoom_in',  label: 'Zoom In',        category: 'action', defaultKey: '=',            currentKey: '=',            actionId: 'zoom_in' },
-  { id: 'action_zoom_out', label: 'Zoom Out',       category: 'action', defaultKey: '-',            currentKey: '-',            actionId: 'zoom_out' },
+  { id: 'action_undo',      label: 'Undo',           category: 'action', defaultKey: 'ctrl+z',       currentKey: 'ctrl+z',       actionId: 'undo' },
+  { id: 'action_redo',      label: 'Redo',           category: 'action', defaultKey: 'ctrl+shift+z', currentKey: 'ctrl+shift+z', actionId: 'redo' },
+  { id: 'action_delete',    label: 'Delete',         category: 'action', defaultKey: 'delete',       currentKey: 'delete',       actionId: 'delete' },
+  { id: 'action_deselect',  label: 'Deselect All',   category: 'action', defaultKey: 'escape',       currentKey: 'escape',       actionId: 'deselect' },
+  { id: 'action_zoom_in',   label: 'Zoom In',        category: 'action', defaultKey: '=',            currentKey: '=',            actionId: 'zoom_in' },
+  { id: 'action_zoom_out',  label: 'Zoom Out',       category: 'action', defaultKey: '-',            currentKey: '-',            actionId: 'zoom_out' },
+  { id: 'action_add_image', label: 'Add Image',      category: 'action', defaultKey: 'i',            currentKey: 'i',            actionId: 'add_image' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

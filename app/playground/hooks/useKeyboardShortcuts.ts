@@ -83,6 +83,9 @@ export function useKeyboardShortcuts() {
           case 'zoom_out':
             setZoom(Math.max(zoom / 1.2, 0.1));
             return;
+          case 'add_image':
+            window.dispatchEvent(new CustomEvent('albus:add-image-toggle'));
+            return;
         }
       }
 
