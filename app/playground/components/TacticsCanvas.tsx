@@ -228,6 +228,7 @@ export default function TacticsCanvas() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Path tool local state
   const [pathTargetPlayerId, setPathTargetPlayerId] = useState<string | null>(null);
@@ -1402,12 +1403,121 @@ export default function TacticsCanvas() {
 
   return (
     <div
-      className={`absolute inset-0 bg-[#0F0A06] overflow-hidden ${cursorClass} outline-none pointer-events-auto`}
+      className={`absolute inset-0 bg-[#0F0A06] overflow-hidden ${cursorClass} outline-none pointer-events-auto transition-shadow duration-200 ${
+        isDragOver ? 'shadow-[inset_0_0_0_3px_rgba(196,124,43,0.55),inset_0_0_50px_rgba(196,124,43,0.08)]' : ''
+      }`}
       style={{ cursor: cursorClass }}
       tabIndex={0}
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => { e.preventDefault(); if (!isDragOver) setIsDragOver(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
       onDrop={(e) => {
         e.preventDefault();
+        setIsDragOver(false);
+
+        // ── Gallery multi-image drop → add as canvas elements with spread animation ──
+        const galleryRaw = e.dataTransfer.getData('application/albus-gallery-images');
+        if (galleryRaw && stageRef.current) {
+          const stage = stageRef.current;
+          const scale = stage.scaleX();
+          const pos = stage.position();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const canvasX = (e.clientX - rect.left - pos.x) / scale;
+          const canvasY = (e.clientY - rect.top  - pos.y) / scale;
+          
+          try {
+            const items = JSON.parse(galleryRaw) as { sourceUrl: string }[];
+            
+            Promise.all(items.map(item => {
+              return new Promise<HTMLImageElement>((resolve) => {
+                const img = new window.Image();
+                img.crossOrigin = 'Anonymous';
+                img.src = item.sourceUrl;
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(img);
+              });
+            })).then(images => {
+              const validImages = images.filter(img => img.width > 0);
+              if (validImages.length === 0) return;
+
+              // Max dimension scaling logic
+              const maxW  = stage.width()  / scale * 0.5;
+              const maxH  = stage.height() / scale * 0.5;
+
+              // Prevent upscaling: cap the ratio at 1
+              const baseRatios = validImages.map(img => Math.min(1, maxW / img.width, maxH / img.height));
+              const widths = validImages.map((img, i) => img.width * baseRatios[i]);
+              const heights = validImages.map((img, i) => img.height * baseRatios[i]);
+
+              const gap = 30; // Gap between images
+              const totalWidth = widths.reduce((acc, w) => acc + w, 0) + (widths.length - 1) * gap;
+              let currentXOffset = canvasX - totalWidth / 2;
+
+              const newElements = validImages.map((img, i) => {
+                const w = widths[i];
+                const h = heights[i];
+                
+                const targetX = currentXOffset;
+                const targetY = canvasY - h / 2;
+                currentXOffset += w + gap;
+                
+                return {
+                  id: Math.random().toString(36).substring(2, 9),
+                  type: 'image' as const,
+                  image: img,
+                  x: canvasX - w / 2, // Start at exact drop center (bunched up)
+                  y: canvasY - h / 2,
+                  targetX,
+                  targetY,
+                  width: w,
+                  height: h,
+                  color: '',
+                  strokeWidth: 0,
+                  opacity: 0.1 // start transparent
+                };
+              });
+
+              // Add all elements to store initially bunched up
+              newElements.forEach(el => addElement({ ...el }));
+              commitHistory();
+
+              // Smoothly animate them to their target spread positions
+              const duration = 400; // ms
+              const startTime = performance.now();
+
+              const animate = () => {
+                const now = performance.now();
+                let progress = (now - startTime) / duration;
+                if (progress > 1) progress = 1;
+                
+                // easeOutQuart for a snappy but smooth landing
+                const ease = 1 - Math.pow(1 - progress, 4);
+
+                newElements.forEach(el => {
+                  updateElement(el.id, {
+                    x: el.x + (el.targetX - el.x) * ease,
+                    y: el.y + (el.targetY - el.y) * ease,
+                    opacity: 0.1 + 0.9 * ease
+                  });
+                });
+
+                if (progress < 1) {
+                  requestAnimationFrame(animate);
+                } else {
+                  // Ensure final exact coordinates
+                  newElements.forEach(el => {
+                    updateElement(el.id, {
+                      x: el.targetX,
+                      y: el.targetY,
+                      opacity: 1
+                    });
+                  });
+                }
+              };
+              requestAnimationFrame(animate);
+            });
+          } catch { /* ignore parse errors */ }
+          return;
+        }
 
         // ── Map image drop → add as a movable canvas element ────────────
         const mapRaw = e.dataTransfer.getData('application/albus-map-bg');
@@ -1450,6 +1560,48 @@ export default function TacticsCanvas() {
             img.onload = () => setBackgroundImage(img);
           }
           return;
+        }
+
+        // ── OS file drop (image files dragged from desktop/explorer) ──────
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0 && stageRef.current) {
+          const file = files[0];
+          if (file.type.startsWith('image/')) {
+            const stage = stageRef.current;
+            const scale = stage.scaleX();
+            const pos = stage.position();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const canvasX = (e.clientX - rect.left - pos.x) / scale;
+            const canvasY = (e.clientY - rect.top  - pos.y) / scale;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              const dataUrl = evt.target?.result as string;
+              const img = new window.Image();
+              img.src = dataUrl;
+              img.onload = () => {
+                const maxW  = Math.min(img.width,  stage.width()  / scale * 0.8);
+                const maxH  = Math.min(img.height, stage.height() / scale * 0.8);
+                const ratio = Math.min(maxW / img.width, maxH / img.height);
+                const w = img.width  * ratio;
+                const h = img.height * ratio;
+                addElement({
+                  id: Math.random().toString(36).substring(2, 9),
+                  type: 'image',
+                  image: img,
+                  x: canvasX - w / 2,
+                  y: canvasY - h / 2,
+                  width: w,
+                  height: h,
+                  color: '',
+                  strokeWidth: 0,
+                });
+                commitHistory();
+              };
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
         }
 
         // ── Squad drop ───────────────────────────────────────────────────

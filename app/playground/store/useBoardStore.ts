@@ -40,6 +40,7 @@ export interface DrawingElement {
   text?: string;
   fontSize?: number;
   fontFamily?: string;
+  opacity?: number;
 }
 
 export interface Player {
@@ -69,10 +70,60 @@ export interface SavedMap {
   category: string;
   imageUrl: string;    // compressed thumbnail for sidebar display only
   sourceUrl?: string;  // full-resolution source – used when loading to canvas
+  itemType?: 'map' | 'gallery'; // 'map' = background, 'gallery' = canvas element; defaults to 'map'
 }
 
 const MAP_CATEGORIES = ['PUBG MOBILE', 'Valorant', 'CS2', 'Apex Legends', 'General'];
 export { MAP_CATEGORIES };
+
+// ─── Default maps (pre-seeded; deletion persisted separately) ─────────────────
+const DEFAULT_MAP_IDS = new Set(['default-erangel', 'default-miramar', 'default-ascent', 'default-haven']);
+
+const DEFAULT_MAPS: SavedMap[] = [
+  {
+    id: 'default-erangel',
+    title: 'Erangel',
+    category: 'PUBG MOBILE',
+    imageUrl: '/api/proxy-image?url=' + encodeURIComponent('https://liquipedia.net/commons/images/e/e7/PUBG_Mobile_Erangel_2023.png'),
+    sourceUrl: '/api/proxy-image?url=' + encodeURIComponent('https://liquipedia.net/commons/images/e/e7/PUBG_Mobile_Erangel_2023.png'),
+    itemType: 'map',
+  },
+  {
+    id: 'default-miramar',
+    title: 'Miramar',
+    category: 'PUBG MOBILE',
+    imageUrl: '/api/proxy-image?url=' + encodeURIComponent('https://liquipedia.net/commons/images/a/ae/PUBG_Mobile_Miramar.png'),
+    sourceUrl: '/api/proxy-image?url=' + encodeURIComponent('https://liquipedia.net/commons/images/a/ae/PUBG_Mobile_Miramar.png'),
+    itemType: 'map',
+  },
+  {
+    id: 'default-ascent',
+    title: 'Ascent',
+    category: 'Valorant',
+    imageUrl: '/api/proxy-image?url=' + encodeURIComponent('https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/a31ef0d024e1add0214eb49698ca13e58f62d17e-641x641.jpg?accountingTag=VAL&auto=format&fit=fill&q=80&w=641'),
+    sourceUrl: '/api/proxy-image?url=' + encodeURIComponent('https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/a31ef0d024e1add0214eb49698ca13e58f62d17e-641x641.jpg?accountingTag=VAL&auto=format&fit=fill&q=80&w=641'),
+    itemType: 'map',
+  },
+  {
+    id: 'default-haven',
+    title: 'Haven',
+    category: 'Valorant',
+    imageUrl: '/api/proxy-image?url=' + encodeURIComponent('https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/d9f3c040be38a8fc1f49f18d1221680419877c05-641x641.png?accountingTag=VAL&auto=format&fit=fill&q=80&w=641'),
+    sourceUrl: '/api/proxy-image?url=' + encodeURIComponent('https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/d9f3c040be38a8fc1f49f18d1221680419877c05-641x641.png?accountingTag=VAL&auto=format&fit=fill&q=80&w=641'),
+    itemType: 'map',
+  },
+];
+
+const getDeletedDefaults = (): string[] => {
+  try { return JSON.parse(localStorage.getItem('albus_deleted_defaults') || '[]'); }
+  catch { return []; }
+};
+const addDeletedDefault = (id: string) => {
+  const existing = getDeletedDefaults();
+  if (!existing.includes(id)) {
+    localStorage.setItem('albus_deleted_defaults', JSON.stringify([...existing, id]));
+  }
+};
 
 interface BoardState {
   activeTool: Tool;
@@ -520,7 +571,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (typeof window === 'undefined') return;
     try {
       const data = localStorage.getItem('albus_saved_maps');
-      if (data) set({ savedMaps: JSON.parse(data) });
+      const userMaps: SavedMap[] = data ? JSON.parse(data) : [];
+      const deletedDefaults = new Set(getDeletedDefaults());
+      // Prepend active defaults (filter out deleted ones, avoid duplicating by ID)
+      const userMapIds = new Set(userMaps.map(m => m.id));
+      const activeDefaults = DEFAULT_MAPS.filter(d => !deletedDefaults.has(d.id) && !userMapIds.has(d.id));
+      set({ savedMaps: [...activeDefaults, ...userMaps] });
     } catch (e) {
       console.error('Failed to parse saved maps', e);
     }
@@ -528,19 +584,20 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   addSavedMap: (mapData) => set((state) => {
     const newMap: SavedMap = { ...mapData, id: Math.random().toString(36).substring(2, 9) };
     const newSaved = [...state.savedMaps, newMap];
-    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved));
+    // Only persist non-default maps to localStorage
+    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved.filter(m => !DEFAULT_MAP_IDS.has(m.id))));
     return { savedMaps: newSaved };
   }),
   removeSavedMap: (mapId) => set((state) => {
+    // If deleting a default, remember it permanently
+    if (DEFAULT_MAP_IDS.has(mapId)) addDeletedDefault(mapId);
     const newSaved = state.savedMaps.filter(m => m.id !== mapId);
-    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved));
+    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved.filter(m => !DEFAULT_MAP_IDS.has(m.id))));
     return { savedMaps: newSaved };
   }),
   updateSavedMap: (mapId, data) => set((state) => {
-    const newSaved = state.savedMaps.map(m =>
-      m.id === mapId ? { ...m, ...data } : m
-    );
-    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved));
+    const newSaved = state.savedMaps.map(m => m.id === mapId ? { ...m, ...data } : m);
+    localStorage.setItem('albus_saved_maps', JSON.stringify(newSaved.filter(m => !DEFAULT_MAP_IDS.has(m.id))));
     return { savedMaps: newSaved };
   }),
 

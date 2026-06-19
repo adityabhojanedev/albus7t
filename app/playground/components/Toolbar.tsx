@@ -5,8 +5,8 @@ import { useHotkeyStore, formatKeyDisplay } from "../store/useHotkeyStore";
 import {
   Pointer, Hand, Pen, Zap, Circle, Square, Type,
   ZoomIn, ZoomOut, Trash2, Download,
-  Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors,
-  Route, Lock, Unlock, ImageOff, Swords, HeartPulse
+  Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors, Save,
+  Route, Lock, Unlock, ImageOff, Swords, HeartPulse, ImagePlus, Link as LinkIcon, Upload
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useBoardStageRef } from "../hooks/useBoardStageRef";
@@ -15,9 +15,9 @@ import { useBoardStageRef } from "../hooks/useBoardStageRef";
 const ToolBtn = ({
   tool, activeTool, onClick, icon: Icon, label, danger = false, shortcutKey
 }: {
-  tool: Tool | 'delete' | 'crop';
+  tool: Tool | 'delete' | 'crop' | 'save_gallery';
   activeTool?: Tool;
-  onClick: (t: Tool | 'delete' | 'crop') => void;
+  onClick: (t: any) => void;
   icon: React.ElementType;
   label: string;
   danger?: boolean;
@@ -108,6 +108,175 @@ function ExportButton() {
   );
 }
 
+// ─── Add Image Button ────────────────────────────────────────────────────────
+function AddImageButton() {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'url' | 'upload' | null>(null);
+  const [urlValue, setUrlValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const stageRef = useBoardStageRef();
+  const { addElement, commitHistory } = useBoardStore();
+
+  // Read the current shortcut key from hotkey store (user-customizable)
+  const shortcutKey = useHotkeyStore(s =>
+    s.bindings.find(b => b.actionId === 'add_image')?.currentKey ?? 'i'
+  );
+
+  // Listen for keyboard shortcut event dispatched by useKeyboardShortcuts
+  useEffect(() => {
+    const handler = () => {
+      setOpen(o => !o);
+      setMode(null);
+      setError('');
+    };
+    window.addEventListener('albus:add-image-toggle', handler);
+    return () => window.removeEventListener('albus:add-image-toggle', handler);
+  }, []);
+
+  const insertImage = (img: HTMLImageElement) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const scale = stage.scaleX();
+    const pos = stage.position();
+    const cx = (stage.width()  / 2 - pos.x) / scale;
+    const cy = (stage.height() / 2 - pos.y) / scale;
+    const maxW = Math.min(img.width,  stage.width()  / scale * 0.7);
+    const maxH = Math.min(img.height, stage.height() / scale * 0.7);
+    const ratio = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width  * ratio;
+    const h = img.height * ratio;
+    addElement({
+      id: Math.random().toString(36).substring(2, 9),
+      type: 'image',
+      image: img,
+      x: cx - w / 2,
+      y: cy - h / 2,
+      width: w,
+      height: h,
+      color: '',
+      strokeWidth: 0,
+    });
+    commitHistory();
+    setOpen(false);
+    setMode(null);
+    setUrlValue('');
+    setError('');
+  };
+
+  const handleUrlLoad = () => {
+    if (!urlValue.trim()) { setError('Enter an image URL.'); return; }
+    setLoading(true); setError('');
+    const proxied = `/api/proxy-image?url=${encodeURIComponent(urlValue.trim())}`;
+    const img = new window.Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = proxied;
+    img.onload  = () => { setLoading(false); insertImage(img); };
+    img.onerror = () => { setLoading(false); setError('Could not load image. Try a direct image URL.'); };
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const dataUrl = evt.target?.result as string;
+      const img = new window.Image();
+      img.src = dataUrl;
+      img.onload = () => insertImage(img);
+    };
+    reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { setOpen(o => !o); setMode(null); setError(''); }}
+        title={`Add Image (${formatKeyDisplay(shortcutKey)})`}
+        className={`relative p-2 rounded-md transition-all duration-200 ${
+          open
+            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+        }`}
+      >
+        <ImagePlus size={20} />
+        {/* Shortcut badge — matches ToolBtn style exactly */}
+        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+          open ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
+        }`}>
+          {formatKeyDisplay(shortcutKey)}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden">
+          <div className="px-3 pb-1.5 border-b border-[#2A1F15] mb-1 flex items-center justify-between">
+            <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Add Image</span>
+            <span className="text-[#3A2F25] text-[9px] font-mono">{formatKeyDisplay(shortcutKey)}</span>
+          </div>
+
+          {/* Option: URL */}
+          {mode !== 'url' && (
+            <button
+              onClick={() => setMode('url')}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-sora text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A] transition-colors"
+            >
+              <LinkIcon size={13} className="text-[#C47C2B]" />
+              Paste Image URL
+            </button>
+          )}
+
+          {mode === 'url' && (
+            <div className="px-3 py-2 flex flex-col gap-2">
+              <div className="flex bg-[#1A0F08] border border-[#2A1F15] rounded overflow-hidden focus-within:border-[#C47C2B] transition-colors">
+                <span className="flex items-center px-2 text-[#7A6A55]"><LinkIcon size={11} /></span>
+                <input
+                  autoFocus
+                  value={urlValue}
+                  onChange={e => { setUrlValue(e.target.value); setError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleUrlLoad(); }}
+                  placeholder="https://example.com/img.png"
+                  className="bg-transparent text-[#F5ECD7] text-[11px] py-1.5 w-full focus:outline-none pr-2"
+                />
+              </div>
+              {error && <p className="text-red-400 text-[10px]">{error}</p>}
+              <div className="flex gap-1.5">
+                <button
+                  onClick={handleUrlLoad}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-1 bg-[#C47C2B]/10 hover:bg-[#C47C2B]/20 text-[#C47C2B] border border-[#C47C2B]/30 py-1.5 rounded text-[11px] font-sora font-semibold transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Loading…' : 'Add to Canvas'}
+                </button>
+                <button
+                  onClick={() => { setMode(null); setError(''); }}
+                  className="px-3 py-1.5 rounded text-[11px] text-[#7A6A55] hover:text-[#F5ECD7] bg-[#1A0F08] transition-colors"
+                >Back</button>
+              </div>
+            </div>
+          )}
+
+          {/* Option: Upload from PC */}
+          {mode !== 'url' && (
+            <>
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-sora text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A] transition-colors"
+              >
+                <Upload size={13} className="text-[#C47C2B]" />
+                Upload from PC
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Toolbar ─────────────────────────────────────────────────────────────
 export default function Toolbar() {
   const {
@@ -122,6 +291,7 @@ export default function Toolbar() {
     teams, clearAllAnimationPaths,
     stagedFight, clearStagedFight,
     clearStagedRevive,
+    addSavedMap,
   } = useBoardStore();
 
   const { bindings, loadBindings } = useHotkeyStore();
@@ -141,9 +311,34 @@ export default function Toolbar() {
     hoverTimer.current = window.setTimeout(() => setOpenPopoverTool(null), 1000);
   };
 
-  const selectedElement = elements.find(el => el.id === selectedElementId);
+  const selectedElement = elements.find(e => e.id === selectedElementId);
   const isImageSelected = selectedElement?.type === 'image';
-  const isColoredElement = selectedElement && ['text', 'line', 'circle', 'rectangle'].includes(selectedElement.type);
+  const isColoredElement = selectedElement && ['path', 'circle', 'rectangle', 'text'].includes(selectedElement.type);
+
+  const handleSaveToGallery = () => {
+    if (!selectedElement || selectedElement.type !== 'image' || !selectedElement.image) return;
+    
+    const img = selectedElement.image;
+    // Generate thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    const scale = Math.min(200 / img.width, 1);
+    thumbCanvas.width = img.width * scale;
+    thumbCanvas.height = img.height * scale;
+    thumbCanvas.getContext('2d')?.drawImage(img, 0, 0, thumbCanvas.width, thumbCanvas.height);
+    const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.65);
+
+    addSavedMap({
+      title: 'Canvas Image',
+      category: 'General',
+      imageUrl: thumbUrl,
+      sourceUrl: img.src,
+      itemType: 'gallery'
+    });
+    
+    // Deselect to indicate action completed
+    setSelectedElementId(null);
+  };
+
   const isSelectedLocked = !!selectedElement?.isLocked;
   const [showElementColorPicker, setShowElementColorPicker] = useState(false);
 
@@ -350,6 +545,11 @@ export default function Toolbar() {
 
       <Divider />
 
+      {/* ── Add Image ──────────────────────────────────────────── */}
+      <AddImageButton />
+
+      <Divider />
+
       {/* ── Group 3: Tactical tools ───────────────────────────── */}
       <div className="relative group">
         <ToolBtn tool="path" activeTool={activeTool} onClick={handleToolClick} icon={Route} label="Path Tool" shortcutKey={keyFor('path')} />
@@ -448,7 +648,10 @@ export default function Toolbar() {
             </div>
           )}
           {isImageSelected && (
-            <ToolBtn tool="crop" activeTool={undefined} onClick={() => setCroppingElementId(selectedElementId)} icon={Scissors} label="Crop Image" />
+            <>
+              <ToolBtn tool="crop" activeTool={undefined} onClick={() => setCroppingElementId(selectedElementId)} icon={Scissors} label="Crop Image" />
+              <ToolBtn tool="save_gallery" activeTool={undefined} onClick={handleSaveToGallery} icon={Save} label="Save to Gallery" />
+            </>
           )}
           <ToolBtn tool="delete" activeTool={undefined} onClick={handleToolClick} icon={Trash2} label="Delete (Del)" danger />
         </>
