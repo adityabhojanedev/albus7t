@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useEffect, useState } from "react";
 
 const RUNES = ["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ", "ᚹ", "ᚺ", "ᚾ"];
@@ -12,23 +12,46 @@ const TAGLINES = [
   "Clutch moments. Tactical brilliance. Pure chaos."
 ];
 
-export default function HeroSection({ onYouTubeClick }: { onYouTubeClick: () => void }) {
+export default function HeroSection() {
   const ease: [number, number, number, number] = [0.25, 0.1, 0.25, 1];
 
   const [mounted, setMounted] = useState(false);
+
+  // Parallax setup
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springConfig = { damping: 30, stiffness: 100 };
+  const smoothX = useSpring(mouseX, springConfig);
+  const smoothY = useSpring(mouseY, springConfig);
+
+  const orb1X = useTransform(smoothX, [-0.5, 0.5], [40, -40]);
+  const orb1Y = useTransform(smoothY, [-0.5, 0.5], [40, -40]);
+  const orb2X = useTransform(smoothX, [-0.5, 0.5], [-50, 50]);
+  const orb2Y = useTransform(smoothY, [-0.5, 0.5], [-50, 50]);
+  
+  const runesBgX = useTransform(smoothX, [-0.5, 0.5], [20, -20]);
+  const runesBgY = useTransform(smoothY, [-0.5, 0.5], [20, -20]);
+  const runesFgX = useTransform(smoothX, [-0.5, 0.5], [-35, 35]);
+  const runesFgY = useTransform(smoothY, [-0.5, 0.5], [-35, 35]);
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (typeof window === "undefined") return;
+    const x = (e.clientX / window.innerWidth) - 0.5;
+    const y = (e.clientY / window.innerHeight) - 0.5;
+    mouseX.set(x);
+    mouseY.set(y);
+  };
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const scrollToVideos = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const element = document.getElementById("videos");
-    element?.scrollIntoView({ behavior: "smooth" });
+  const scrollToNext = () => {
+    document.getElementById("latest-videos")?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <section id="hero" className="relative w-full h-screen overflow-hidden bg-[#0A0705] flex flex-col justify-center items-center z-0">
+    <section id="hero" onMouseMove={handleMouseMove} className="relative w-full h-screen overflow-hidden bg-[#0A0705] flex flex-col justify-center items-center z-0">
 
       {/* 1. Top Edge Parchment Fade */}
       <div className="absolute top-0 left-0 w-full h-[120px] bg-gradient-to-b from-[#1A0F08] to-transparent z-[5] pointer-events-none" />
@@ -38,13 +61,13 @@ export default function HeroSection({ onYouTubeClick }: { onYouTubeClick: () => 
         animate={{ scale: [1, 1.1, 1] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
         className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#7C4A1E] blur-3xl rounded-full z-[1] pointer-events-none"
-        style={{ opacity: 0.15 }}
+        style={{ opacity: 0.15, x: orb1X, y: orb1Y }}
       />
       <motion.div
         animate={{ scale: [1, 1.2, 1] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
         className="absolute bottom-[-50px] right-[-50px] w-[300px] h-[300px] bg-[#C47C2B] blur-3xl rounded-full z-[1] pointer-events-none"
-        style={{ opacity: 0.10 }}
+        style={{ opacity: 0.10, x: orb2X, y: orb2Y }}
       />
 
       {/* Subtle noise/grain texture overlay */}
@@ -57,54 +80,104 @@ export default function HeroSection({ onYouTubeClick }: { onYouTubeClick: () => 
 
       {/* 3. Floating Rune Symbols & 4. Ambient Particle Dots */}
       {mounted && (
-        <div className="absolute inset-0 z-[3] pointer-events-none overflow-hidden">
-          {/* 10 Runes */}
-          {Array.from({ length: 10 }).map((_, i) => (
-            <motion.div
-              key={`rune-${i}`}
-              animate={{ y: [-15, 15, -15] }}
-              transition={{
-                duration: 6 + Math.random() * 6,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: Math.random() * 2,
-              }}
-              className="absolute text-[#C47C2B]"
-              style={{
-                top: `${10 + Math.random() * 80}%`,
-                left: `${10 + Math.random() * 80}%`,
-                opacity: 0.15,
-                fontSize: `${1.5 + Math.random()}rem`,
-              }}
-            >
-              {RUNES[i % RUNES.length]}
-            </motion.div>
-          ))}
-          {/* 25 Particle Dots */}
-          {Array.from({ length: 25 }).map((_, i) => {
-            const size = 2 + Math.random() * 2;
-            return (
+        <>
+          {/* Background Runes and Dots (slower parallax) */}
+          <motion.div style={{ x: runesBgX, y: runesBgY }} className="absolute inset-0 z-[3] pointer-events-none overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
               <motion.div
-                key={`dot-${i}`}
-                animate={{ scale: [1, 1.6, 1] }}
+                key={`rune-bg-${i}`}
+                animate={{ y: [-15, 15, -15] }}
                 transition={{
-                  duration: 3 + Math.random() * 4,
+                  duration: 6 + Math.random() * 6,
                   repeat: Infinity,
                   ease: "easeInOut",
-                  delay: Math.random() * 5,
+                  delay: Math.random() * 2,
                 }}
-                className="absolute bg-[#E8A44A] rounded-full"
+                className="absolute text-[#C47C2B]"
                 style={{
-                  top: `${Math.random() * 100}%`,
-                  left: `${Math.random() * 100}%`,
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  opacity: 0.2, // bumped slightly for better visibility
+                  top: `${10 + Math.random() * 80}%`,
+                  left: `${10 + Math.random() * 80}%`,
+                  opacity: 0.1,
+                  fontSize: `${1.2 + Math.random()}rem`,
                 }}
-              />
-            );
-          })}
-        </div>
+              >
+                {RUNES[i % RUNES.length]}
+              </motion.div>
+            ))}
+            {Array.from({ length: 12 }).map((_, i) => {
+              const size = 2 + Math.random() * 2;
+              return (
+                <motion.div
+                  key={`dot-bg-${i}`}
+                  animate={{ scale: [1, 1.6, 1] }}
+                  transition={{
+                    duration: 3 + Math.random() * 4,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: Math.random() * 5,
+                  }}
+                  className="absolute bg-[#E8A44A] rounded-full"
+                  style={{
+                    top: `${Math.random() * 100}%`,
+                    left: `${Math.random() * 100}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    opacity: 0.15,
+                  }}
+                />
+              );
+            })}
+          </motion.div>
+
+          {/* Foreground Runes and Dots (faster, opposite parallax) */}
+          <motion.div style={{ x: runesFgX, y: runesFgY }} className="absolute inset-0 z-[4] pointer-events-none overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <motion.div
+                key={`rune-fg-${i}`}
+                animate={{ y: [-15, 15, -15] }}
+                transition={{
+                  duration: 6 + Math.random() * 6,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: Math.random() * 2,
+                }}
+                className="absolute text-[#C47C2B]"
+                style={{
+                  top: `${10 + Math.random() * 80}%`,
+                  left: `${10 + Math.random() * 80}%`,
+                  opacity: 0.2,
+                  fontSize: `${1.8 + Math.random()}rem`,
+                  filter: 'blur(1px)' // Foreground blur for depth of field
+                }}
+              >
+                {RUNES[(i + 5) % RUNES.length]}
+              </motion.div>
+            ))}
+            {Array.from({ length: 13 }).map((_, i) => {
+              const size = 3 + Math.random() * 2;
+              return (
+                <motion.div
+                  key={`dot-fg-${i}`}
+                  animate={{ scale: [1, 1.6, 1] }}
+                  transition={{
+                    duration: 3 + Math.random() * 4,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: Math.random() * 5,
+                  }}
+                  className="absolute bg-[#E8A44A] rounded-full"
+                  style={{
+                    top: `${Math.random() * 100}%`,
+                    left: `${Math.random() * 100}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    opacity: 0.3,
+                  }}
+                />
+              );
+            })}
+          </motion.div>
+        </>
       )}
 
       {/* Hero Content */}
@@ -144,30 +217,47 @@ export default function HeroSection({ onYouTubeClick }: { onYouTubeClick: () => 
           Albus Universe — and you&apos;re already in it.
         </motion.p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full mt-4">
-          <motion.a
-            href="#videos"
-            onClick={scrollToVideos}
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.7, ease }}
-            className="inline-flex items-center justify-center font-sora font-semibold text-[#0A0705] bg-[#C47C2B] hover:bg-[#E8A44A] hover:shadow-[0_0_20px_#E8A44A55] transition-all duration-300 rounded px-[28px] py-[12px] w-full sm:w-auto"
-          >
-            Explore the Universe <span className="ml-2 font-inter font-bold">↓</span>
-          </motion.a>
-
+        {/* Animated scroll arrow */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2, duration: 0.8 }}
+          className="mt-8 flex justify-center"
+        >
           <motion.button
-            onClick={onYouTubeClick}
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.8, ease }}
-            className="inline-flex items-center justify-center font-sora font-semibold text-[#C47C2B] bg-transparent border border-[#7C4A1E] hover:border-[#E8A44A] hover:text-[#E8A44A] hover:bg-[#7C4A1E18] transition-all duration-300 rounded px-[28px] py-[12px] w-full sm:w-auto"
+            onClick={scrollToNext}
+            onHoverStart={scrollToNext}
+            aria-label="Scroll to next section"
+            whileHover={{ scale: 1.1 }}
+            className="group relative flex flex-col items-center gap-1 focus:outline-none"
           >
-            Watch Latest Drop <span className="ml-2 font-inter font-bold">→</span>
+            {/* Glow ring */}
+            <motion.div
+              animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.1, 0.3] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-[#C47C2B] blur-md pointer-events-none"
+            />
+            {/* Stacked chevrons */}
+            <motion.div
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <svg
+                width="28" height="18" viewBox="0 0 28 18" fill="none"
+                className="opacity-30 -mb-2"
+              >
+                <polyline points="2,2 14,14 26,2" stroke="#C47C2B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <svg
+                width="28" height="18" viewBox="0 0 28 18" fill="none"
+                className="opacity-70"
+              >
+                <polyline points="2,2 14,14 26,2" stroke="#E8A44A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </motion.div>
           </motion.button>
-        </div>
+        </motion.div>
       </div>
 
       {/* Scrolling Marquee inside the strict 100vh constraint */}
