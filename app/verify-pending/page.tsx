@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ApiResponse } from "@/types/auth";
 
 const COOLDOWN_SECONDS = 120; // 2 minutes, matches API
 
-export default function VerifyPendingPage() {
+function VerifyPendingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const email = searchParams.get("email") ?? "";
@@ -198,5 +198,19 @@ export default function VerifyPendingPage() {
         </p>
       </motion.div>
     </main>
+  );
+}
+
+export default function VerifyPendingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-screen h-screen bg-[#0A0705] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-[#C47C2B] border-t-transparent animate-spin" />
+        </div>
+      }
+    >
+      <VerifyPendingContent />
+    </Suspense>
   );
 }
