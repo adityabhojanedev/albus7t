@@ -179,7 +179,7 @@ export default function AboutSection() {
                 ease: [0.25, 0.1, 0.25, 1],
                 delay: 0.7 + idx * 0.15,
               }}
-              className="group relative flex flex-col items-center bg-[#110B07] border border-[#2A1F15] rounded-[6px] p-[28px] transition-all duration-300 hover:border-[#C47C2B] hover:shadow-[0_0_24px_rgba(196,124,43,0.2)]"
+              className="group relative flex flex-col items-center bg-[#110B0780] backdrop-blur-lg border border-white/5 rounded-[6px] p-[28px] transition-all duration-300 hover:border-[#C47C2B] hover:shadow-[0_0_24px_rgba(196,124,43,0.2)]"
             >
               <div className="mb-4 transition-transform duration-300 group-hover:scale-110 flex items-center justify-center min-h-[50px]">
                 {card.icon}

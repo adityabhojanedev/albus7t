@@ -184,7 +184,7 @@ export default function VideosSection({ onYouTubeClick }: { onYouTubeClick: () =
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-            className="relative w-full md:w-[65%] aspect-video bg-[#1A0F08] border border-[#2A1F15] rounded-[6px] overflow-hidden group block shrink-0 z-20"
+            className="relative w-full md:w-[65%] aspect-video bg-[#1A0F0880] backdrop-blur-xl border border-white/5 rounded-[6px] overflow-hidden group block shrink-0 z-20"
           >
             {/* 1. Initial State: Custom Cinematic Thumbnail Cover */}
             <div className={`absolute inset-0 w-full h-full z-30 transition-opacity duration-[400ms] ${hasStarted ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"}`}>
@@ -290,7 +290,7 @@ export default function VideosSection({ onYouTubeClick }: { onYouTubeClick: () =
                   transition={{ duration: 0.8, delay: 0.45 + idx * 0.15, ease: [0.25, 0.1, 0.25, 1] }}
                   className="group relative w-full flex flex-row items-center cursor-pointer focus:outline-none border-l-[2px] border-transparent hover:border-[#C47C2B] hover:shadow-[-8px_0_12px_-8px_rgba(196,124,43,0.4)] transition-all duration-300 pl-4 md:pl-6 py-2 md:py-4 flex-1 text-left"
                 >
-                  <div className="relative w-[120px] h-[68px] bg-[#1A0F08] border border-[#2A1F15] rounded-[4px] shrink-0 overflow-hidden shadow-lg">
+                  <div className="relative w-[120px] h-[68px] bg-[#1A0F0880] backdrop-blur-md border border-white/5 rounded-[4px] shrink-0 overflow-hidden shadow-lg">
                     <img 
                       src={video.thumbnail} 
                       alt={video.title} 
