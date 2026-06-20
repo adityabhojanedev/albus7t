@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import Link from "next/link";
 
 export const metadata = {
@@ -40,7 +39,7 @@ export default function VerifySuccessPage() {
           </svg>
         </div>
 
-        <style jsx>{`
+        <style>{`
           @keyframes drawCheck {
             from { stroke-dashoffset: 50; }
             to { stroke-dashoffset: 0; }
