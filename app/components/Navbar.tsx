@@ -29,8 +29,30 @@ export default function Navbar() {
 
   useEffect(() => {
     const handleOpenModal = () => setIsPlaygroundModalOpen(true);
+    const handleOpenFeedback = async () => {
+      try {
+        const res = await fetch("/api/me");
+        if (!res.ok) {
+          router.push("/login?redirect=" + window.location.pathname);
+          return;
+        }
+      } catch {
+        router.push("/login?redirect=" + window.location.pathname);
+        return;
+      }
+      setFeedbackSubject("");
+      setFeedbackMessage("");
+      setFeedbackStatus("idle");
+      setFeedbackError("");
+      setIsFeedbackOpen(true);
+    };
+
     window.addEventListener("openPlaygroundModal", handleOpenModal);
-    return () => window.removeEventListener("openPlaygroundModal", handleOpenModal);
+    window.addEventListener("openFeedbackModal", handleOpenFeedback);
+    return () => {
+      window.removeEventListener("openPlaygroundModal", handleOpenModal);
+      window.removeEventListener("openFeedbackModal", handleOpenFeedback);
+    };
   }, []);
 
   const handleLinkClick = async (e: React.MouseEvent, linkName: string, href: string) => {
