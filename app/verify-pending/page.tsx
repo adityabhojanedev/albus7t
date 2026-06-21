@@ -30,6 +30,29 @@ function VerifyPendingContent() {
     };
   }, []);
 
+  // Listen for verification status via SSE
+  useEffect(() => {
+    if (!email) return;
+
+    const eventSource = new EventSource(`/api/verify-status?email=${encodeURIComponent(email)}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.verified) {
+          eventSource.close();
+          router.replace("/login?verified=1");
+        }
+      } catch (err) {
+        console.error("Error parsing SSE data", err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [email, router]);
+
   function startCountdown(seconds: number) {
     setCountdown(seconds);
     timerRef.current = setInterval(() => {
@@ -190,12 +213,20 @@ function VerifyPendingContent() {
           </AnimatePresence>
         </div>
 
-        <p className="mt-8 font-sora text-xs text-[#5A4A3A]">
-          Wrong email?{" "}
-          <a href="/signup" className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors">
-            Sign up again
-          </a>
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <p className="font-sora text-xs text-[#5A4A3A]">
+            Wrong email?{" "}
+            <a href="/signup" className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors">
+              Sign up again
+            </a>
+          </p>
+          <p className="font-sora text-xs text-[#5A4A3A]">
+            Already verified?{" "}
+            <a href="/login" className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors">
+              Sign in
+            </a>
+          </p>
+        </div>
       </motion.div>
     </main>
   );

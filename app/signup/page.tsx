@@ -314,9 +314,9 @@ export default function SignupPage() {
       >
         {/* Header */}
         <div className="text-center mb-8">
-          <span className="font-bebas text-3xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-[#C47C2B] via-[#E8A44A] to-[#F5ECD7]">
+          <a href="/" className="inline-block font-bebas text-3xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-[#C47C2B] via-[#E8A44A] to-[#F5ECD7] hover:opacity-80 transition-opacity">
             Albus Universe
-          </span>
+          </a>
           <h1 className="font-bebas text-5xl text-[#F5ECD7] mt-1 tracking-wide leading-tight">
             Create Account
           </h1>
