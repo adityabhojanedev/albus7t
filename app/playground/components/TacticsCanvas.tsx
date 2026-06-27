@@ -2,12 +2,13 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Rect, Image as KonvaImage, Transformer, Group, Text, Arrow, Arc } from 'react-konva';
-import { useBoardStore, Player, Team, StagedFight } from '../store/useBoardStore';
+import { useBoardStore, Player, Team, StagedFight, Point, DrawingElement } from '../store/useBoardStore';
 import { Pen, Lock } from 'lucide-react';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import gsap from 'gsap';
 import { setBoardStageRef } from '../hooks/useBoardStageRef';
+import YouTube, { YouTubeEvent, YouTubePlayer } from 'react-youtube';
 
 // ─── Player Node ──────────────────────────────────────────────────────────────
 const PlayerNode = React.memo(function PlayerNode({
@@ -200,7 +201,373 @@ const PlayerNode = React.memo(function PlayerNode({
   );
 });
 
+const formatTime = (seconds: number) => {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+// ─── YouTube Box ──────────────────────────────────────────────────────────────
+type ResizeDir = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+
+const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
+  element: DrawingElement; zoom: number; stagePosition: Point; activeTool: string;
+}) => {
+  const [ytPlayer, setYtPlayer] = useState<YouTubePlayer | null>(null);
+  const [playing, setPlaying]   = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [hoverPct, setHoverPct] = useState<number | null>(null);
+
+  // ── Screen-space position/size (drives DOM, updated in real-time) ──────
+  const toScreen = () => ({
+    sl: stagePosition.x + (element.x || 0) * zoom,
+    st: stagePosition.y + (element.y || 0) * zoom,
+    sw: (element.width  || 480) * zoom,
+    sh: (element.height || 270) * zoom,
+  });
+
+  const [localScreen, setLocalScreen] = useState(toScreen());
+  const activeGesture = useRef(false);
+
+  // Compute live screen position. If not actively dragging the box, sync perfectly to pan/zoom.
+  const screen = activeGesture.current ? localScreen : toScreen();
+
+  // Always-fresh refs so event handlers never have stale values
+  const zoomRef         = useRef(zoom);
+  const stagePosRef     = useRef(stagePosition);
+  const screenRef       = useRef(screen);
+  useEffect(() => { zoomRef.current = zoom; },          [zoom]);
+  useEffect(() => { stagePosRef.current = stagePosition; }, [stagePosition]);
+  useEffect(() => { screenRef.current = screen; },       [screen]);
+
+  // ── Drag ───────────────────────────────────────────────────────────────
+  const dragData = useRef<{ mx: number; my: number; osl: number; ost: number } | null>(null);
+
+  const handleDragMouseDown = (e: React.MouseEvent) => {
+    if (activeTool !== 'select') return;
+    e.preventDefault(); e.stopPropagation();
+    useBoardStore.getState().setSelectedElementId(element.id);
+    activeGesture.current = true;
+    const s = screenRef.current;
+    dragData.current = { mx: e.clientX, my: e.clientY, osl: s.sl, ost: s.st };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragData.current) return;
+      const d = dragData.current;
+      setLocalScreen(prev => ({ ...prev, sl: d.osl + (ev.clientX - d.mx), st: d.ost + (ev.clientY - d.my) }));
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      if (!dragData.current) return;
+      const d = dragData.current;
+      const newSl = d.osl + (ev.clientX - d.mx);
+      const newSt = d.ost + (ev.clientY - d.my);
+      // Convert back to canvas-space using live refs
+      const z = zoomRef.current;
+      const sp = stagePosRef.current;
+      const cx = (newSl - sp.x) / z;
+      const cy = (newSt - sp.y) / z;
+      const { updateElement, commitHistory } = useBoardStore.getState();
+      updateElement(element.id, { x: cx, y: cy });
+      commitHistory();
+      dragData.current = null;
+      activeGesture.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  // ── Resize ─────────────────────────────────────────────────────────────
+  const resizeData = useRef<{
+    dir: ResizeDir; mx: number; my: number;
+    osl: number; ost: number; osw: number; osh: number;
+  } | null>(null);
+
+  const handleResizeMouseDown = (e: React.MouseEvent, dir: ResizeDir) => {
+    if (activeTool !== 'select') return;
+    e.preventDefault(); e.stopPropagation();
+    useBoardStore.getState().setSelectedElementId(element.id);
+    activeGesture.current = true;
+    const s = screenRef.current;
+    resizeData.current = { dir, mx: e.clientX, my: e.clientY, osl: s.sl, ost: s.st, osw: s.sw, osh: s.sh };
+
+    const MIN_PX = 120; // minimum screen-space size
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizeData.current) return;
+      const r = resizeData.current;
+      const dx = ev.clientX - r.mx;
+      const dy = ev.clientY - r.my;
+      let nl = r.osl, nt = r.ost, nw = r.osw, nh = r.osh;
+
+      if (dir.includes('e')) nw = Math.max(MIN_PX, r.osw + dx);
+      if (dir.includes('s')) nh = Math.max(MIN_PX, r.osh + dy);
+      if (dir.includes('w')) { nw = Math.max(MIN_PX, r.osw - dx); nl = r.osl + r.osw - nw; }
+      if (dir.includes('n')) { nh = Math.max(MIN_PX, r.osh - dy); nt = r.ost + r.osh - nh; }
+
+      setLocalScreen({ sl: nl, st: nt, sw: nw, sh: nh });
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      if (!resizeData.current) return;
+      const r = resizeData.current;
+      const dx = ev.clientX - r.mx;
+      const dy = ev.clientY - r.my;
+      let nl = r.osl, nt = r.ost, nw = r.osw, nh = r.osh;
+
+      if (dir.includes('e')) nw = Math.max(MIN_PX, r.osw + dx);
+      if (dir.includes('s')) nh = Math.max(MIN_PX, r.osh + dy);
+      if (dir.includes('w')) { nw = Math.max(MIN_PX, r.osw - dx); nl = r.osl + r.osw - nw; }
+      if (dir.includes('n')) { nh = Math.max(MIN_PX, r.osh - dy); nt = r.ost + r.osh - nh; }
+
+      const z = zoomRef.current;
+      const sp = stagePosRef.current;
+      const { updateElement, commitHistory } = useBoardStore.getState();
+      updateElement(element.id, {
+        x: (nl - sp.x) / z,
+        y: (nt - sp.y) / z,
+        width:  nw / z,
+        height: nh / z,
+      });
+      commitHistory();
+      resizeData.current = null;
+      activeGesture.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  // ── Playback progress ticker ────────────────────────────────────────────
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (playing && ytPlayer) {
+      interval = setInterval(() => {
+        try {
+          const ct = ytPlayer.getCurrentTime();
+          const d  = ytPlayer.getDuration();
+          if (d > 0) { setCurrentTime(ct); setDuration(d); setProgress(ct / d); }
+        } catch { /* ignore */ }
+      }, 250);
+    } else if (ytPlayer) {
+      try { setCurrentTime(ytPlayer.getCurrentTime()); setDuration(ytPlayer.getDuration()); } catch {}
+    }
+    return () => clearInterval(interval);
+  }, [playing, ytPlayer]);
+
+  const resizeHandles: { dir: ResizeDir; style: React.CSSProperties; cursor: string }[] = [
+    { dir: 'nw', style: { top: 0,    left: 0 },                                  cursor: 'nwse-resize' },
+    { dir: 'ne', style: { top: 0,    right: 0 },                                 cursor: 'nesw-resize' },
+    { dir: 'sw', style: { bottom: 0, left: 0 },                                  cursor: 'nesw-resize' },
+    { dir: 'se', style: { bottom: 0, right: 0 },                                 cursor: 'nwse-resize' },
+    { dir: 'n',  style: { top: 0,    left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { dir: 's',  style: { bottom: 0, left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { dir: 'w',  style: { left: 0,   top: '50%',  transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+    { dir: 'e',  style: { right: 0,  top: '50%',  transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+  ];
+
+  const { sl, st, sw, sh } = screen;
+  const isInteractive = activeTool === 'select' || activeTool === 'pan' || playing;
+
+  return (
+    <>
+      {/* ── 1. Video box ─ below Stage (z-5) so Konva can select it ──────────
+          overflow:hidden clips the iframe so YouTube chrome is hidden        */}
+      <div
+        className="absolute bg-black border-[2.5px] border-[#3A2A1D] rounded-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+        style={{ left: sl, top: st, width: sw, height: sh, zIndex: 5, userSelect: 'none' }}
+      >
+        {/* Iframe overflow-crop: -56px hides YT title bar, -42px hides control bar */}
+        <div className="absolute pointer-events-none" style={{ top: -56, left: 0, right: 0, bottom: -42 }}>
+          <YouTube
+            videoId={element.youtubeUrl}
+            opts={{
+              width: '100%', height: '100%',
+              playerVars: {
+                controls: 0, disablekb: 1, rel: 0,
+                modestbranding: 1, playsinline: 1,
+                showinfo: 0, iv_load_policy: 3,
+                fs: 0, autoplay: 0, cc_load_policy: 0,
+              }
+            }}
+            onReady={(e: YouTubeEvent) => {
+              setYtPlayer(e.target);
+              try { setDuration(e.target.getDuration()); } catch {}
+            }}
+            onStateChange={(e: YouTubeEvent) => setPlaying(e.data === 1)}
+            className="w-full h-full bg-black pointer-events-none"
+          />
+        </div>
+        {/* Full-cover guard — stops any YT watermark/button clicks */}
+        <div className="absolute inset-0 z-10 pointer-events-none" />
+      </div>
+
+      {/* ── 2. Interaction overlay ─ z-30 (above Stage at z-10) ─────────────
+          NOT inside overflow:hidden so handles are never clipped.
+          pointer-events-none on wrapper; auto only on interactive children.  */}
+      {activeTool === 'select' && (
+        <div
+          className="absolute pointer-events-none"
+          style={{ left: sl - 6, top: st - 6, width: sw + 12, height: sh + 12, zIndex: 30 }}
+        >
+          {/* Drag handle — top strip inside the box area */}
+          <div
+            className="absolute flex items-center gap-2 px-3 select-none pointer-events-auto"
+            style={{
+              top: 6, left: 6, right: 6, height: 36,
+              cursor: 'grab',
+              background: 'linear-gradient(to bottom, rgba(10,7,5,0.92) 0%, transparent 100%)',
+              borderRadius: '10px 10px 0 0',
+            }}
+            onMouseDown={handleDragMouseDown}
+          >
+            <div className="flex gap-[3px] opacity-70">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="flex flex-col gap-[3px]">
+                  <div className="w-[3px] h-[3px] rounded-full bg-[#C47C2B]" />
+                  <div className="w-[3px] h-[3px] rounded-full bg-[#C47C2B]" />
+                </div>
+              ))}
+            </div>
+            <span className="text-[#F5ECD7] text-[10px] font-inter opacity-40 pointer-events-none">Video</span>
+          </div>
+
+          {/* Resize handles — positioned relative to the -6px padded wrapper */}
+          {resizeHandles.map(({ dir, style, cursor }) => (
+            <div
+              key={dir}
+              className="absolute w-[12px] h-[12px] bg-[#C47C2B] border-[2px] border-[#0A0705] rounded-[3px] pointer-events-auto hover:scale-125 transition-transform"
+              style={{ ...style, cursor, position: 'absolute' }}
+              onMouseDown={(e) => handleResizeMouseDown(e, dir)}
+            />
+          ))}
+
+          {/* Selection border */}
+          <div
+            className="absolute border-[2px] border-[#C47C2B]/60 rounded-xl pointer-events-none"
+            style={{ top: 6, left: 6, right: 6, bottom: 6 }}
+          />
+
+          {/* Delete Button */}
+          <button
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              const { removeElement, commitHistory, setSelectedElementId } = useBoardStore.getState();
+              removeElement(element.id);
+              setSelectedElementId(null);
+              commitHistory();
+            }}
+            className="absolute -top-1 -right-1 w-6 h-6 bg-[#FF3B30] text-white rounded-full flex items-center justify-center shadow-[0_4px_12px_rgba(255,59,48,0.5)] pointer-events-auto hover:scale-110 hover:bg-[#FF453A] transition-all z-50"
+            title="Delete Video"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* ── 3. Custom playback controls ─ z-20 (above Stage) ────────────────
+          Separate from the interaction overlay so they don't interfere        */}
+      {isInteractive && (
+        <div
+          className="absolute pointer-events-none flex items-end justify-center pb-3 px-3 group/ctrl"
+          style={{ left: sl, top: st, width: sw, height: sh, zIndex: 20 }}
+        >
+          <div className={`pointer-events-auto flex items-center gap-4 bg-[#0A0705E6] backdrop-blur-xl border border-[#3A2A1D] px-5 py-3 rounded-2xl shadow-2xl transition-opacity duration-300 w-full max-w-[90%] ${playing ? 'opacity-0 group-hover/ctrl:opacity-100' : 'opacity-100'}`}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!ytPlayer) return;
+                if (playing) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+              }}
+              className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors p-1 flex-shrink-0"
+            >
+              {playing ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              )}
+            </button>
+
+            <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12 text-right">
+              {formatTime(currentTime)}
+            </span>
+
+            <div
+              className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber"
+              onMouseLeave={() => setHoverPct(null)}
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+              }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!ytPlayer) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const dur  = ytPlayer.getDuration();
+                ytPlayer.seekTo(dur * pct, true);
+                setProgress(pct); setCurrentTime(dur * pct);
+              }}
+            >
+              <div className="absolute top-0 left-0 h-full bg-[#C47C2B] group-hover/scrubber:bg-[#E8A44A] transition-colors rounded-full" style={{ width: `${progress * 100}%` }} />
+              {hoverPct !== null && duration > 0 && (
+                <div
+                  className="absolute -top-7 px-1.5 py-0.5 bg-[#C47C2B] text-[#0A0705] text-[10px] font-mono rounded shadow-lg pointer-events-none"
+                  style={{ left: `${hoverPct * 100}%`, transform: 'translateX(-50%)' }}
+                >
+                  {formatTime(duration * hoverPct)}
+                </div>
+              )}
+            </div>
+
+            <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12">
+              {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4. Center Play/Pause Overlay ─ z-20 ────────────────────────────── */}
+      {isInteractive && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 group/center-play"
+          style={{ left: sl, top: st, width: sw, height: sh }}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              useBoardStore.getState().setSelectedElementId(element.id);
+              if (!ytPlayer) return;
+              if (playing) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+            }}
+            className="pointer-events-auto bg-[#0A0705CC] hover:bg-[#C47C2B] backdrop-blur-md text-[#C47C2B] hover:text-[#0A0705] border border-[#C47C2B]/40 rounded-full w-20 h-20 flex items-center justify-center shadow-[0_0_40px_rgba(196,124,43,0.3)] hover:scale-110 transition-all opacity-0 group-hover/ytbox:opacity-100 hover:opacity-100"
+          >
+            {playing ? (
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : (
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="ml-1"><polygon points="5,3 21,12 5,21"/></svg>
+            )}
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
 // ─── Main Canvas ──────────────────────────────────────────────────────────────
+
 export default function TacticsCanvas() {
   const {
     activeTool, zoom, stagePosition, setZoomByWheel, setStagePosition,
@@ -247,6 +614,8 @@ export default function TacticsCanvas() {
 
   // Fight/Revive UI state
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
+
+
 
   // Text editing state
   const [editingText, setEditingText] = useState<{
@@ -342,8 +711,13 @@ export default function TacticsCanvas() {
         const node = stageRef.current?.findOne('#cropBox');
         if (node) { trRef.current.nodes([node]); trRef.current.getLayer()?.batchDraw(); }
       } else if (selectedElementId) {
-        const node = stageRef.current?.findOne(`#${selectedElementId}`);
-        if (node) { trRef.current.nodes([node]); trRef.current.getLayer()?.batchDraw(); }
+        const selectedElement = elements.find(el => el.id === selectedElementId);
+        if (selectedElement && selectedElement.type === 'youtube') {
+          trRef.current.nodes([]);
+        } else {
+          const node = stageRef.current?.findOne(`#${selectedElementId}`);
+          if (node) { trRef.current.nodes([node]); trRef.current.getLayer()?.batchDraw(); }
+        }
       } else {
         trRef.current.nodes([]);
       }
@@ -1214,11 +1588,23 @@ export default function TacticsCanvas() {
         e.cancelBubble = true;
         if (activeTool === 'select') setSelectedElementId(el.id);
       },
+      onDragMove: (e: KonvaEventObject<DragEvent>) => {
+        window.dispatchEvent(new CustomEvent(`albus:element-move-${el.id}`, {
+          detail: { x: e.currentTarget.x(), y: e.currentTarget.y(), scaleX: e.currentTarget.scaleX(), scaleY: e.currentTarget.scaleY() }
+        }));
+      },
+      onTransform: (e: KonvaEventObject<Event>) => {
+        window.dispatchEvent(new CustomEvent(`albus:element-move-${el.id}`, {
+          detail: { x: e.currentTarget.x(), y: e.currentTarget.y(), scaleX: e.currentTarget.scaleX(), scaleY: e.currentTarget.scaleY() }
+        }));
+      },
       onDragEnd: (e: KonvaEventObject<DragEvent>) => {
+        window.dispatchEvent(new CustomEvent(`albus:element-end-${el.id}`));
         updateElement(el.id, { x: e.target.x(), y: e.target.y() });
         commitHistory();
       },
       onTransformEnd: (e: KonvaEventObject<Event>) => {
+        window.dispatchEvent(new CustomEvent(`albus:element-end-${el.id}`));
         const node = e.target;
         updateElement(el.id, {
           x: node.x(), y: node.y(),
@@ -1385,6 +1771,33 @@ export default function TacticsCanvas() {
             shadowOffset={{ x: 1, y: 1 }}
           />
           {isLocked && <LockBadge bx={-10} by={-14} />}
+        </Group>
+      );
+    }
+    if (el.type === 'youtube') {
+      const w = el.width || 480;
+      const h = el.height || 270;
+      return (
+        <Group
+          key={el.id}
+          id={el.id}
+          x={el.x || 0} y={el.y || 0}
+          scaleX={el.scaleX || 1} scaleY={el.scaleY || 1}
+          rotation={el.rotation || 0}
+          draggable={false}
+          onClick={(e: KonvaEventObject<Event>) => { e.cancelBubble = true; if (activeTool === 'select') setSelectedElementId(el.id); }}
+          onTap={(e: KonvaEventObject<Event>) => { e.cancelBubble = true; if (activeTool === 'select') setSelectedElementId(el.id); }}
+        >
+          <Rect
+            x={0} y={0}
+            width={w} height={h}
+            fill="transparent"
+            stroke="transparent"
+            strokeWidth={0}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+          {isLocked && <LockBadge bx={Math.max(w - 10, 10)} by={10} />}
         </Group>
       );
     }
@@ -1623,8 +2036,15 @@ export default function TacticsCanvas() {
         }
       }}
     >
-      <Stage
-        width={windowSize.width}
+      {/* YouTube Boxes HTML Overlays */}
+      {elements.filter(el => el.type === 'youtube').map(el => (
+        <YouTubeBox key={`yt-${el.id}`} element={el} zoom={zoom} stagePosition={stagePosition} activeTool={activeTool} />
+      ))}
+
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <Stage
+          className="pointer-events-auto"
+          width={windowSize.width}
         height={windowSize.height}
         onClick={checkDeselect}
         onTap={checkDeselect}
@@ -1633,6 +2053,11 @@ export default function TacticsCanvas() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         draggable={activeTool === 'pan'}
+        onDragMove={(e) => {
+          if (e.target === e.currentTarget) {
+            setStagePosition({ x: e.target.x(), y: e.target.y() });
+          }
+        }}
         onDragEnd={(e) => {
           if (e.target === e.currentTarget) {
             setStagePosition({ x: e.target.x(), y: e.target.y() });
@@ -1884,6 +2309,7 @@ export default function TacticsCanvas() {
           )}
         </Layer>
       </Stage>
+      </div>
 
       {/* Text editing textarea overlay */}
       {editingText && (() => {

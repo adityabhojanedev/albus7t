@@ -86,6 +86,9 @@ export function useKeyboardShortcuts() {
           case 'add_image':
             window.dispatchEvent(new CustomEvent('albus:add-image-toggle'));
             return;
+          case 'add_youtube':
+            window.dispatchEvent(new CustomEvent('albus:add-youtube-toggle'));
+            return;
         }
       }
 

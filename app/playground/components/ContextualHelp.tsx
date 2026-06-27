@@ -1,17 +1,39 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { useBoardStore } from '../store/useBoardStore';
 
 export default function ContextualHelp() {
   const activeTool = useBoardStore(s => s.activeTool);
   const stagedFight = useBoardStore(s => s.stagedFight);
 
+  const [ytPopoverOpen, setYtPopoverOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: any) => setYtPopoverOpen(e.detail);
+    window.addEventListener('albus:youtube-popover-state', handler);
+    return () => window.removeEventListener('albus:youtube-popover-state', handler);
+  }, []);
+
   let content: React.ReactNode = null;
   let borderColor = '#C47C2B';
 
-  switch (activeTool) {
-    case 'path':
-      content = (
+  if (ytPopoverOpen) {
+    content = (
+      <>
+        <span className="text-base mr-1">▶️</span>
+        <div>
+          <span className="text-[#F5ECD7] text-xs font-sora font-bold">Video Tool</span>
+          <p className="text-[#A89A85] text-[11px] font-inter leading-snug mt-0.5">
+            Paste a YouTube link in the toolbar to add a video on the map.
+          </p>
+        </div>
+      </>
+    );
+    borderColor = '#C47C2B';
+  } else {
+    switch (activeTool) {
+      case 'path':
+        content = (
         <>
           <span className="text-base mr-1">📍</span>
           <div>
@@ -89,8 +111,9 @@ export default function ContextualHelp() {
       borderColor = '#E8A44A';
       break;
 
-    default:
-      return null;
+      default:
+        return null;
+    }
   }
 
   return (

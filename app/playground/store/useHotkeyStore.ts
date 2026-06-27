@@ -37,6 +37,7 @@ const DEFAULT_BINDINGS: HotkeyBinding[] = [
   { id: 'action_zoom_in',   label: 'Zoom In',        category: 'action', defaultKey: '=',            currentKey: '=',            actionId: 'zoom_in' },
   { id: 'action_zoom_out',  label: 'Zoom Out',       category: 'action', defaultKey: '-',            currentKey: '-',            actionId: 'zoom_out' },
   { id: 'action_add_image', label: 'Add Image',      category: 'action', defaultKey: 'i',            currentKey: 'i',            actionId: 'add_image' },
+  { id: 'action_add_youtube', label: 'Add Video',    category: 'action', defaultKey: 'y',            currentKey: 'y',            actionId: 'add_youtube' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
