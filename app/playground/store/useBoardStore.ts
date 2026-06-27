@@ -20,7 +20,8 @@ export interface Point {
 
 export interface DrawingElement {
   id: string;
-  type: 'line' | 'eraser' | 'circle' | 'rectangle' | 'image' | 'text';
+  type: 'line' | 'eraser' | 'circle' | 'rectangle' | 'image' | 'text' | 'youtube';
+  youtubeUrl?: string; // e.g. "dQw4w9WgXcQ" video id
   points?: number[];
   x?: number;
   y?: number;

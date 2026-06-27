@@ -6,7 +6,7 @@ import {
   Pointer, Hand, Pen, Zap, Circle, Square, Type,
   ZoomIn, ZoomOut, Trash2, Download,
   Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors, Save,
-  Route, Lock, Unlock, ImageOff, Swords, HeartPulse, ImagePlus, Link as LinkIcon, Upload
+  Route, Lock, Unlock, ImageOff, Swords, HeartPulse, ImagePlus, Link as LinkIcon, Upload, Video
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useBoardStageRef } from "../hooks/useBoardStageRef";
@@ -17,7 +17,7 @@ const ToolBtn = ({
 }: {
   tool: Tool | 'delete' | 'crop' | 'save_gallery';
   activeTool?: Tool;
-  onClick: (t: any) => void;
+  onClick: (t: Tool | 'delete' | 'crop' | 'save_gallery') => void;
   icon: React.ElementType;
   label: string;
   danger?: boolean;
@@ -109,8 +109,7 @@ function ExportButton() {
 }
 
 // ─── Add Image Button ────────────────────────────────────────────────────────
-function AddImageButton() {
-  const [open, setOpen] = useState(false);
+function AddImageButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
   const [mode, setMode] = useState<'url' | 'upload' | null>(null);
   const [urlValue, setUrlValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,7 +126,7 @@ function AddImageButton() {
   // Listen for keyboard shortcut event dispatched by useKeyboardShortcuts
   useEffect(() => {
     const handler = () => {
-      setOpen(o => !o);
+      onToggle();
       setMode(null);
       setError('');
     };
@@ -159,7 +158,7 @@ function AddImageButton() {
       strokeWidth: 0,
     });
     commitHistory();
-    setOpen(false);
+    onToggle();
     setMode(null);
     setUrlValue('');
     setError('');
@@ -193,10 +192,10 @@ function AddImageButton() {
   return (
     <div className="relative">
       <button
-        onClick={() => { setOpen(o => !o); setMode(null); setError(''); }}
+        onClick={() => { onToggle(); setMode(null); setError(''); }}
         title={`Add Image (${formatKeyDisplay(shortcutKey)})`}
         className={`relative p-2 rounded-md transition-all duration-200 ${
-          open
+          isOpen
             ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
             : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
         }`}
@@ -204,13 +203,13 @@ function AddImageButton() {
         <ImagePlus size={20} />
         {/* Shortcut badge — matches ToolBtn style exactly */}
         <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
-          open ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
+          isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
         }`}>
           {formatKeyDisplay(shortcutKey)}
         </span>
       </button>
 
-      {open && (
+      {isOpen && (
         <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden">
           <div className="px-3 pb-1.5 border-b border-[#2A1F15] mb-1 flex items-center justify-between">
             <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Add Image</span>
@@ -277,6 +276,125 @@ function AddImageButton() {
   );
 }
 
+// ─── Add YouTube Button ────────────────────────────────────────────────────────
+function AddYouTubeButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+  const [urlValue, setUrlValue] = useState('');
+  const [error, setError] = useState('');
+  const stageRef = useBoardStageRef();
+  const { addElement, commitHistory } = useBoardStore();
+
+  // Read the current shortcut key from hotkey store
+  const shortcutKey = useHotkeyStore(s =>
+    s.bindings.find(b => b.actionId === 'add_youtube')?.currentKey ?? 'y'
+  );
+
+  // Listen for keyboard shortcut event dispatched by useKeyboardShortcuts
+  useEffect(() => {
+    const handler = () => {
+      onToggle();
+      setError('');
+    };
+    window.addEventListener('albus:add-youtube-toggle', handler);
+    return () => window.removeEventListener('albus:add-youtube-toggle', handler);
+  }, []);
+
+  const handleUrlSubmit = () => {
+    if (!urlValue.trim()) { setError('Enter a YouTube URL.'); return; }
+    
+    let videoId = '';
+    const urlStr = urlValue.trim();
+    const match = urlStr.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|live\/|shorts\/))([^&?\s/]{11})/);
+    if (match) {
+      videoId = match[1];
+    }
+    
+    if (!videoId || videoId.length !== 11) {
+      setError('Invalid YouTube URL.');
+      return;
+    }
+
+    const stage = stageRef.current;
+    if (!stage) return;
+    const scale = stage.scaleX();
+    const pos = stage.position();
+    const cx = (stage.width()  / 2 - pos.x) / scale;
+    const cy = (stage.height() / 2 - pos.y) / scale;
+    const w = 480;
+    const h = 270;
+
+    addElement({
+      id: Math.random().toString(36).substring(2, 9),
+      type: 'youtube',
+      youtubeUrl: videoId,
+      x: cx - w / 2,
+      y: cy - h / 2,
+      width: w,
+      height: h,
+      color: '',
+      strokeWidth: 0,
+    });
+    commitHistory();
+    onToggle();
+    setUrlValue('');
+    setError('');
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { 
+          onToggle();
+          if (isOpen) setUrlValue('');
+          setError(''); 
+        }}
+        title={`Add YouTube Video (${formatKeyDisplay(shortcutKey)})`}
+        className={`relative p-2 rounded-md transition-all duration-200 ${
+          isOpen
+            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+        }`}
+      >
+        <Video size={20} />
+        {/* Shortcut badge — matches ToolBtn style */}
+        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+          isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
+        }`}>
+          {formatKeyDisplay(shortcutKey)}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden">
+          <div className="px-3 pb-1.5 border-b border-[#2A1F15] mb-1 flex items-center justify-between">
+            <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Add YouTube Video</span>
+          </div>
+
+          <div className="px-3 py-2 flex flex-col gap-2">
+            <div className="flex bg-[#1A0F08] border border-[#2A1F15] rounded overflow-hidden focus-within:border-[#C47C2B] transition-colors">
+              <span className="flex items-center px-2 text-[#7A6A55]"><Video size={11} /></span>
+              <input
+                autoFocus
+                value={urlValue}
+                onChange={e => { setUrlValue(e.target.value); setError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter') handleUrlSubmit(); }}
+                placeholder="https://youtube.com/watch?v=..."
+                className="bg-transparent text-[#F5ECD7] text-[11px] py-1.5 w-full focus:outline-none pr-2"
+              />
+            </div>
+            {error && <p className="text-red-400 text-[10px]">{error}</p>}
+            <button
+              onClick={handleUrlSubmit}
+              className="w-full flex items-center justify-center gap-1 bg-[#C47C2B]/10 hover:bg-[#C47C2B]/20 text-[#C47C2B] border border-[#C47C2B]/30 py-1.5 rounded text-[11px] font-sora font-semibold transition-colors"
+            >
+              Add Video
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Toolbar ─────────────────────────────────────────────────────────────
 export default function Toolbar() {
   const {
@@ -297,10 +415,9 @@ export default function Toolbar() {
   const { bindings, loadBindings } = useHotkeyStore();
   useEffect(() => { loadBindings(); }, [loadBindings]);
 
-  // Helper to get current key for a tool
   const keyFor = (toolId: string) => bindings.find(b => b.toolId === toolId)?.currentKey || '';
 
-  const [openPopoverTool, setOpenPopoverTool] = useState<Tool | null>(null);
+  const [openPopoverTool, setOpenPopoverTool] = useState<Tool | 'image' | 'youtube' | null>(null);
   const hoverTimer = useRef<number | null>(null);
 
   const handleMouseEnterTool = () => {
@@ -319,7 +436,6 @@ export default function Toolbar() {
     if (!selectedElement || selectedElement.type !== 'image' || !selectedElement.image) return;
     
     const img = selectedElement.image;
-    // Generate thumbnail
     const thumbCanvas = document.createElement('canvas');
     const scale = Math.min(200 / img.width, 1);
     thumbCanvas.width = img.width * scale;
@@ -335,22 +451,24 @@ export default function Toolbar() {
       itemType: 'gallery'
     });
     
-    // Deselect to indicate action completed
     setSelectedElementId(null);
   };
 
   const isSelectedLocked = !!selectedElement?.isLocked;
   const [showElementColorPicker, setShowElementColorPicker] = useState(false);
 
-  // Close element color picker when selection changes
-  useEffect(() => { setShowElementColorPicker(false); }, [selectedElementId]);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    // Timeout avoids synchronous setState cascading render warning
+    const t = setTimeout(() => setShowElementColorPicker(false), 0);
+    return () => clearTimeout(t);
+  }, [selectedElementId]);
 
   const handleZoomIn = () => setZoom(Math.min(zoom * 1.2, 10));
   const handleZoomOut = () => setZoom(Math.max(zoom / 1.2, 0.1));
 
   const hasAnyPath = teams.some(t => t.players.some(p => p.animationPath && p.animationPath.length >= 4));
 
-  // Lock the selected element directly — if nothing selected, enter lock-mode tool
   const handleLockClick = () => {
     if (selectedElementId) {
       toggleElementLock(selectedElementId);
@@ -359,7 +477,7 @@ export default function Toolbar() {
     }
   };
 
-  const handleToolClick = (tool: Tool | 'delete' | 'crop') => {
+  const handleToolClick = (tool: Tool | 'delete' | 'crop' | 'save_gallery') => {
     if (tool === 'delete') {
       if (selectedElementId) {
         removeElement(selectedElementId);
@@ -369,21 +487,29 @@ export default function Toolbar() {
       return;
     }
     if (tool === 'crop') return;
+    if (tool === 'save_gallery') return;
 
     if (activeTool === tool) {
-      setOpenPopoverTool(prev => prev === tool ? null : tool as Tool);
+      setOpenPopoverTool(prev => prev === tool ? null : tool as any);
     } else {
       setOpenPopoverTool(null);
       setTool(tool as Tool);
     }
   };
 
+  const handlePopoverToggle = (tool: Tool | 'image' | 'youtube') => {
+    setOpenPopoverTool(prev => prev === tool ? null : tool);
+  };
+
+  // Broadcast popover state so ContextualHelp can show the tutorial guide
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('albus:youtube-popover-state', { detail: openPopoverTool === 'youtube' }));
+  }, [openPopoverTool]);
+
   const colors = ['#C47C2B', '#E8A44A', '#FFFFFF', '#FF3B30', '#34C759', '#007AFF', '#A259FF'];
 
-  // Color change handler — also updates selected element color in real-time
   const handleColorChange = (color: string) => {
     setStrokeColor(color);
-    // If a text (or any drawing) element is selected, live-update its color
     if (selectedElementId) {
       const el = elements.find(e => e.id === selectedElementId);
       if (el) {
@@ -444,7 +570,6 @@ export default function Toolbar() {
     </div>
   );
 
-  // ── Crop mode UI ────────────────────────────────────────────────────────────
   if (croppingElementId) {
     return (
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0A0705CC] backdrop-blur-md border border-[#2A1F15] rounded-[12px] p-2 shadow-2xl">
@@ -464,13 +589,11 @@ export default function Toolbar() {
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-1 bg-[#0A0705CC] backdrop-blur-md border border-[#2A1F15] rounded-[12px] px-2 py-2 shadow-2xl">
 
-      {/* ── Group 1: Navigation tools ─────────────────────────── */}
       <ToolBtn tool="select" activeTool={activeTool} onClick={handleToolClick} icon={Pointer} label="Select" shortcutKey={keyFor('select')} />
       <ToolBtn tool="pan" activeTool={activeTool} onClick={handleToolClick} icon={Hand} label="Pan" shortcutKey={keyFor('pan')} />
 
       <Divider />
 
-      {/* ── Group 2: Drawing tools ────────────────────────────── */}
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
         <ToolBtn tool="pen" activeTool={activeTool} onClick={handleToolClick} icon={Pen} label="Pen" shortcutKey={keyFor('pen')} />
         {openPopoverTool === 'pen' && renderSettingsPopover()}
@@ -545,8 +668,9 @@ export default function Toolbar() {
 
       <Divider />
 
-      {/* ── Add Image ──────────────────────────────────────────── */}
-      <AddImageButton />
+      {/* ── Add Image & Video ──────────────────────────────────────────── */}
+      <AddImageButton isOpen={openPopoverTool === 'image'} onToggle={() => handlePopoverToggle('image')} />
+      <AddYouTubeButton isOpen={openPopoverTool === 'youtube'} onToggle={() => handlePopoverToggle('youtube')} />
 
       <Divider />
 
