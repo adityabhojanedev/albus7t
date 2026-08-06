@@ -10,16 +10,13 @@ const navLinks = [
   { name: "Streams", href: "https://www.twitch.tv/albus7t" },
   { name: "Esport", href: "/esports" },
   { name: "Guides", href: "/guides" },
-  { name: "Playground", href: "#" },
+  { name: "Playground", href: "/playground" },
   { name: "Feedback", href: "#" },
 ];
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isPlaygroundModalOpen, setIsPlaygroundModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-  const [passcode, setPasscode] = useState("");
-  const [playgroundError, setPlaygroundError] = useState("");
   const [feedbackSubject, setFeedbackSubject] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "sending" | "sent" | "error" | "limitReached">("idle");
@@ -28,7 +25,6 @@ export default function Navbar() {
   const pathname = usePathname();
 
   useEffect(() => {
-    const handleOpenModal = () => setIsPlaygroundModalOpen(true);
     const handleOpenFeedback = async () => {
       try {
         const res = await fetch("/api/me");
@@ -47,37 +43,13 @@ export default function Navbar() {
       setIsFeedbackOpen(true);
     };
 
-    window.addEventListener("openPlaygroundModal", handleOpenModal);
     window.addEventListener("openFeedbackModal", handleOpenFeedback);
     return () => {
-      window.removeEventListener("openPlaygroundModal", handleOpenModal);
       window.removeEventListener("openFeedbackModal", handleOpenFeedback);
     };
   }, []);
 
   const handleLinkClick = async (e: React.MouseEvent, linkName: string, href: string) => {
-    if (linkName === "Playground") {
-      e.preventDefault();
-      setIsOpen(false);
-      // Step 1: Check if the user is signed in
-      try {
-        const res = await fetch("/api/me");
-        if (!res.ok) {
-          // Not signed in → redirect to login with return path
-          router.push("/login?redirect=/playground");
-          return;
-        }
-      } catch {
-        router.push("/login?redirect=/playground");
-        return;
-      }
-      // Step 2: Signed in → show passcode modal
-      setPasscode("");
-      setPlaygroundError("");
-      setIsPlaygroundModalOpen(true);
-      return;
-    }
-
     if (linkName === "Feedback") {
       e.preventDefault();
       setIsOpen(false);
@@ -111,17 +83,6 @@ export default function Navbar() {
       }
     }
     setIsOpen(false);
-  };
-
-  const handlePlaygroundSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passcode === "albus123") {
-      setIsPlaygroundModalOpen(false);
-      sessionStorage.setItem("albus_authenticated", "true");
-      router.push("/playground");
-    } else {
-      setPlaygroundError("Incorrect passcode. Access denied.");
-    }
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -266,76 +227,6 @@ export default function Navbar() {
           )}
         </AnimatePresence>
       </motion.nav>
-
-      {/* ── Playground Passcode Modal ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isPlaygroundModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
-            onClick={() => {
-              setIsPlaygroundModalOpen(false);
-              setPlaygroundError("");
-              setPasscode("");
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="relative w-full max-w-[400px] bg-[#0A0705AA] backdrop-blur-xl border border-white/10 rounded-[12px] p-8 shadow-[0_0_50px_rgba(196,124,43,0.25)] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="absolute top-0 right-0 w-[200px] h-[200px] bg-[#C47C2B]/10 blur-[80px] rounded-full pointer-events-none" />
-              <div className="relative z-10 flex flex-col">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="font-bebas text-3xl text-[#F5ECD7] tracking-wider mb-1">Restricted Area</h3>
-                    <p className="font-inter text-xs text-[#7A6A55]">Enter secret code to access Playground.</p>
-                  </div>
-                  <button
-                    onClick={() => { setIsPlaygroundModalOpen(false); setPlaygroundError(""); setPasscode(""); }}
-                    className="text-[#7A6A55] hover:text-[#C47C2B] transition-colors p-2 -mr-2 -mt-2 focus:outline-none"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-                <form onSubmit={handlePlaygroundSubmit} className="flex flex-col gap-4">
-                  <div>
-                    <input
-                      type="password"
-                      value={passcode}
-                      onChange={(e) => setPasscode(e.target.value)}
-                      placeholder="Enter secret code..."
-                      className="w-full bg-[#1A0F0880] backdrop-blur-sm border border-white/10 text-[#F5ECD7] font-inter text-sm rounded-[6px] px-4 py-3 focus:outline-none focus:border-[#C47C2B] transition-colors"
-                      autoFocus
-                    />
-                    {playgroundError && (
-                      <motion.span
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        className="text-red-500 text-xs font-inter mt-2 block"
-                      >
-                        {playgroundError}
-                      </motion.span>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full font-sora font-semibold text-sm text-[#0A0705] bg-[#C47C2B] hover:bg-[#E8A44A] transition-colors rounded-[6px] py-3 mt-2"
-                  >
-                    Enter Playground
-                  </button>
-                </form>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Feedback Modal ───────────────────────────────────────────────────── */}
       <AnimatePresence>

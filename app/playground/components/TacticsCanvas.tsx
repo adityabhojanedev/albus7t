@@ -222,6 +222,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(true);
 
   // ── Screen-space position/size (drives DOM, updated in real-time) ──────
   const toScreen = () => ({
@@ -484,57 +485,77 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
           className="absolute pointer-events-none flex items-end justify-center pb-3 px-3 group/ctrl"
           style={{ left: sl, top: st, width: sw, height: sh, zIndex: 20 }}
         >
-          <div className={`pointer-events-auto flex items-center gap-4 bg-[#0A0705E6] backdrop-blur-xl border border-[#3A2A1D] px-5 py-3 rounded-2xl shadow-2xl transition-opacity duration-300 w-full max-w-[90%] ${playing ? 'opacity-0 group-hover/ctrl:opacity-100' : 'opacity-100'}`}>
+          <div className={`pointer-events-auto flex items-center bg-[#0A0705E6] backdrop-blur-xl border border-[#3A2A1D] rounded-2xl shadow-2xl transition-all duration-300 w-max max-w-[90%] px-3 py-3 ${playing ? 'opacity-0 group-hover/ctrl:opacity-100' : 'opacity-100'}`}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsTimelineExpanded(p => !p);
+              }}
+              className="text-[#7A6A55] hover:text-[#C47C2B] transition-colors p-0.5 flex-shrink-0 mr-1 opacity-60 hover:opacity-100 cursor-pointer"
+              title={isTimelineExpanded ? "Collapse Timeline" : "Expand Timeline"}
+            >
+              <svg 
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                className={`transition-transform duration-300 ${isTimelineExpanded ? 'rotate-180' : 'rotate-0'}`}
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 if (!ytPlayer) return;
                 if (playing) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
               }}
-              className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors p-1 flex-shrink-0"
+              className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors p-1 flex-shrink-0 cursor-pointer"
             >
               {playing ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><polygon points="5,3 19,12 5,21"/></svg>
               )}
             </button>
 
-            <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12 text-right">
-              {formatTime(currentTime)}
-            </span>
-
-            <div
-              className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber"
-              onMouseLeave={() => setHoverPct(null)}
-              onMouseMove={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
-              }}
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!ytPlayer) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                const dur  = ytPlayer.getDuration();
-                ytPlayer.seekTo(dur * pct, true);
-                setProgress(pct); setCurrentTime(dur * pct);
-              }}
+            <div 
+              className={`flex items-center overflow-hidden transition-all duration-300 ease-in-out ${isTimelineExpanded ? 'max-w-[800px] w-[80vw] opacity-100 gap-4 ml-3 pr-2' : 'max-w-0 w-[80vw] opacity-0 gap-0 ml-0 pr-0'}`}
             >
-              <div className="absolute top-0 left-0 h-full bg-[#C47C2B] group-hover/scrubber:bg-[#E8A44A] transition-colors rounded-full" style={{ width: `${progress * 100}%` }} />
-              {hoverPct !== null && duration > 0 && (
-                <div
-                  className="absolute -top-7 px-1.5 py-0.5 bg-[#C47C2B] text-[#0A0705] text-[10px] font-mono rounded shadow-lg pointer-events-none"
-                  style={{ left: `${hoverPct * 100}%`, transform: 'translateX(-50%)' }}
-                >
-                  {formatTime(duration * hoverPct)}
-                </div>
-              )}
-            </div>
+              <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12 text-right">
+                {formatTime(currentTime)}
+              </span>
 
-            <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12">
-              {formatTime(duration)}
-            </span>
+              <div
+                className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber"
+                onMouseLeave={() => setHoverPct(null)}
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+                }}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!ytPlayer) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                  const dur  = ytPlayer.getDuration();
+                  ytPlayer.seekTo(dur * pct, true);
+                  setProgress(pct); setCurrentTime(dur * pct);
+                }}
+              >
+                <div className="absolute top-0 left-0 h-full bg-[#C47C2B] group-hover/scrubber:bg-[#E8A44A] transition-colors rounded-full" style={{ width: `${progress * 100}%` }} />
+                {hoverPct !== null && duration > 0 && (
+                  <div
+                    className="absolute -top-7 px-1.5 py-0.5 bg-[#C47C2B] text-[#0A0705] text-[10px] font-mono rounded shadow-lg pointer-events-none"
+                    style={{ left: `${hoverPct * 100}%`, transform: 'translateX(-50%)' }}
+                  >
+                    {formatTime(duration * hoverPct)}
+                  </div>
+                )}
+              </div>
+
+              <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12">
+                {formatTime(duration)}
+              </span>
+            </div>
           </div>
         </div>
       )}

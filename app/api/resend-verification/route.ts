@@ -9,7 +9,7 @@
 
 import { NextRequest } from "next/server";
 import crypto from "crypto";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB, isDatabaseError } from "@/lib/mongodb";
 import User from "@/models/User";
 import { sendVerificationEmail } from "@/lib/brevo";
 import type { ResendBody } from "@/types/auth";
@@ -116,6 +116,14 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[POST /api/resend-verification] Error:", error);
+    
+    if (isDatabaseError(error)) {
+      return Response.json(
+        { success: false, message: "Database connection failed or is currently unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
+    
     return Response.json(
       { success: false, message: "Something went wrong. Please try again." },
       { status: 500 }
