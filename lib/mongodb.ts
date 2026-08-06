@@ -48,3 +48,20 @@ export async function connectDB(): Promise<typeof mongoose> {
   cache.conn = await cache.promise;
   return cache.conn;
 }
+
+/**
+ * Detects if an error is a database connection or handshake error
+ */
+export function isDatabaseError(err: unknown): boolean {
+  if (typeof err === "object" && err !== null) {
+    const errorString = String((err as any).message || err).toLowerCase();
+    return (
+      errorString.includes("mongoserverselectionerror") ||
+      errorString.includes("econnrefused") ||
+      errorString.includes("timeout") ||
+      errorString.includes("handshake") ||
+      errorString.includes("network")
+    );
+  }
+  return false;
+}

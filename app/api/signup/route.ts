@@ -16,7 +16,7 @@
 import { NextRequest } from "next/server";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB, isDatabaseError } from "@/lib/mongodb";
 import User from "@/models/User";
 import { sendVerificationEmail } from "@/lib/brevo";
 import type { SignupBody } from "@/types/auth";
@@ -235,6 +235,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Never leak DB or internal error details to the client
     console.error("[POST /api/signup] Error:", error);
+    
+    if (isDatabaseError(error)) {
+      return Response.json(
+        {
+          success: false,
+          message: "Database connection failed or is currently unavailable. Please try again later.",
+        },
+        { status: 503 }
+      );
+    }
+
     return Response.json(
       {
         success: false,

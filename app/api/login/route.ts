@@ -6,7 +6,7 @@
 
 import { NextRequest } from "next/server";
 import bcrypt from "bcrypt";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB, isDatabaseError } from "@/lib/mongodb";
 import User from "@/models/User";
 import { signToken, buildSessionCookie } from "@/lib/auth";
 import type { LoginBody, PublicUser } from "@/types/auth";
@@ -107,6 +107,14 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[POST /api/login] Error:", error);
+    
+    if (isDatabaseError(error)) {
+      return Response.json(
+        { success: false, message: "Database connection failed or is currently unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
+    
     return Response.json(
       { success: false, message: "Something went wrong. Please try again." },
       { status: 500 }
