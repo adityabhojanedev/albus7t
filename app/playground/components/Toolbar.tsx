@@ -6,14 +6,25 @@ import {
   Pointer, Hand, Pen, Zap, Circle, Square, Type,
   ZoomIn, ZoomOut, Trash2, Download,
   Eraser, Undo2, Redo2, XCircle, PaintBucket, Check, Scissors, Save,
-  Route, Lock, Unlock, ImageOff, Swords, HeartPulse, ImagePlus, Link as LinkIcon, Upload, Video
+  Route, Lock, Unlock, ImageOff, Swords, HeartPulse, ImagePlus, Link as LinkIcon, Upload, Video, GripVertical, ChevronLeft, ChevronRight, Trash
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useBoardStageRef } from "../hooks/useBoardStageRef";
+
+// ─── Tooltip Component ────────────────────────────────────────────────────────
+const Tooltip = ({ label, shortcut, isAtBottom = false, children }: { label: string, shortcut?: string, isAtBottom?: boolean, children: React.ReactNode }) => (
+  <div className="relative group/tooltip flex items-center justify-center">
+    {children}
+    <div className={`pointer-events-none absolute left-1/2 -translate-x-1/2 ${isAtBottom ? 'bottom-full mb-2 group-hover/tooltip:-translate-y-1' : 'top-full mt-2 group-hover/tooltip:translate-y-1'} opacity-0 group-hover/tooltip:opacity-100 transition-all duration-200 z-[60] bg-[#0A0705] text-[#F5ECD7] text-[10px] font-sora font-medium px-2.5 py-1.5 rounded-[6px] border border-[#2A1F15] shadow-2xl whitespace-nowrap flex items-center gap-1.5`}>
+      {label}
+      {shortcut && <span className="text-[#7A6A55] font-mono text-[9px] bg-[#1A0F08] px-1.5 py-0.5 rounded border border-[#2A1F15]">{formatKeyDisplay(shortcut)}</span>}
+    </div>
+  </div>
+);
 
 // ─── Tool Button ──────────────────────────────────────────────────────────────
 const ToolBtn = ({
-  tool, activeTool, onClick, icon: Icon, label, danger = false, shortcutKey
+  tool, activeTool, onClick, icon: Icon, label, danger = false, shortcutKey, isAtBottom = false
 }: {
   tool: Tool | 'delete' | 'crop' | 'save_gallery';
   activeTool?: Tool;
@@ -22,31 +33,33 @@ const ToolBtn = ({
   label: string;
   danger?: boolean;
   shortcutKey?: string;
+  isAtBottom?: boolean;
 }) => {
   const isActive = activeTool === tool;
   return (
-    <button
-      onClick={() => onClick(tool)}
-      title={shortcutKey ? `${label} (${formatKeyDisplay(shortcutKey)})` : label}
-      className={`relative p-2 rounded-md transition-all duration-200 ${
-        danger
-          ? 'text-red-500/80 hover:text-red-400 hover:bg-red-500/10'
-          : isActive
-            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
-            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
-      }`}
-    >
-      <Icon size={20} />
-      {shortcutKey && (
-        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
-          isActive
-            ? 'bg-[#0A0705]/40 text-[#0A0705]'
-            : 'bg-[#2A1F15] text-[#7A6A55]'
-        }`}>
-          {formatKeyDisplay(shortcutKey)}
-        </span>
-      )}
-    </button>
+    <Tooltip label={label} shortcut={shortcutKey} isAtBottom={isAtBottom}>
+      <button
+        onClick={() => onClick(tool)}
+        className={`relative p-2 rounded-md transition-all duration-200 ${
+          danger
+            ? 'text-red-500/80 hover:text-red-400 hover:bg-red-500/10'
+            : isActive
+              ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+              : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+        }`}
+      >
+        <Icon size={20} />
+        {shortcutKey && (
+          <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+            isActive
+              ? 'bg-[#0A0705]/40 text-[#0A0705]'
+              : 'bg-[#2A1F15] text-[#7A6A55]'
+          }`}>
+            {formatKeyDisplay(shortcutKey)}
+          </span>
+        )}
+      </button>
+    </Tooltip>
   );
 };
 
@@ -54,7 +67,7 @@ const ToolBtn = ({
 const Divider = () => <div className="w-px h-6 bg-[#2A1F15] mx-1 flex-shrink-0" />;
 
 // ─── Export Button ────────────────────────────────────────────────────────────
-function ExportButton() {
+function ExportButton({ isAtBottom }: { isAtBottom: boolean }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const stageRef = useBoardStageRef();
@@ -74,19 +87,20 @@ function ExportButton() {
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        title="Export canvas"
-        className={`p-2 rounded-md transition-all duration-200 ${
-          open
-            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
-            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
-        }`}
-      >
-        <Download size={20} />
-      </button>
+      <Tooltip label="Export canvas" isAtBottom={isAtBottom}>
+        <button
+          onClick={() => setOpen(!open)}
+          className={`p-2 rounded-md transition-all duration-200 ${
+            open
+              ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+              : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+          }`}
+        >
+          <Download size={20} />
+        </button>
+      </Tooltip>
       {open && (
-        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[8px] shadow-2xl z-50 min-w-[150px] py-1">
+        <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[8px] shadow-2xl z-50 min-w-[150px] py-1`}>
           <div className="px-3 py-1.5 border-b border-[#2A1F15]">
             <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Export As</span>
           </div>
@@ -109,7 +123,7 @@ function ExportButton() {
 }
 
 // ─── Add Image Button ────────────────────────────────────────────────────────
-function AddImageButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+function AddImageButton({ isOpen, onToggle, isAtBottom }: { isOpen: boolean; onToggle: () => void; isAtBottom: boolean }) {
   const [mode, setMode] = useState<'url' | 'upload' | null>(null);
   const [urlValue, setUrlValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -191,26 +205,27 @@ function AddImageButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () =>
 
   return (
     <div className="relative">
-      <button
-        onClick={() => { onToggle(); setMode(null); setError(''); }}
-        title={`Add Image (${formatKeyDisplay(shortcutKey)})`}
-        className={`relative p-2 rounded-md transition-all duration-200 ${
-          isOpen
-            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
-            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
-        }`}
-      >
-        <ImagePlus size={20} />
-        {/* Shortcut badge — matches ToolBtn style exactly */}
-        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
-          isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
-        }`}>
-          {formatKeyDisplay(shortcutKey)}
-        </span>
-      </button>
+      <Tooltip label="Add Image" shortcut={shortcutKey} isAtBottom={isAtBottom}>
+        <button
+          onClick={() => { onToggle(); setMode(null); setError(''); }}
+          className={`relative p-2 rounded-md transition-all duration-200 ${
+            isOpen
+              ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+              : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+          }`}
+        >
+          <ImagePlus size={20} />
+          {/* Shortcut badge — matches ToolBtn style exactly */}
+          <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+            isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
+          }`}>
+            {formatKeyDisplay(shortcutKey)}
+          </span>
+        </button>
+      </Tooltip>
 
       {isOpen && (
-        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden">
+        <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden`}>
           <div className="px-3 pb-1.5 border-b border-[#2A1F15] mb-1 flex items-center justify-between">
             <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Add Image</span>
             <span className="text-[#3A2F25] text-[9px] font-mono">{formatKeyDisplay(shortcutKey)}</span>
@@ -277,7 +292,7 @@ function AddImageButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () =>
 }
 
 // ─── Add YouTube Button ────────────────────────────────────────────────────────
-function AddYouTubeButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+function AddYouTubeButton({ isOpen, onToggle, isAtBottom }: { isOpen: boolean; onToggle: () => void; isAtBottom: boolean }) {
   const [urlValue, setUrlValue] = useState('');
   const [error, setError] = useState('');
   const stageRef = useBoardStageRef();
@@ -341,30 +356,31 @@ function AddYouTubeButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () 
 
   return (
     <div className="relative">
-      <button
-        onClick={() => { 
-          onToggle();
-          if (isOpen) setUrlValue('');
-          setError(''); 
-        }}
-        title={`Add YouTube Video (${formatKeyDisplay(shortcutKey)})`}
-        className={`relative p-2 rounded-md transition-all duration-200 ${
-          isOpen
-            ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
-            : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
-        }`}
-      >
-        <Video size={20} />
-        {/* Shortcut badge — matches ToolBtn style */}
-        <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
-          isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
-        }`}>
-          {formatKeyDisplay(shortcutKey)}
-        </span>
-      </button>
+      <Tooltip label="Add YouTube Video" shortcut={shortcutKey} isAtBottom={isAtBottom}>
+        <button
+          onClick={() => { 
+            onToggle();
+            if (isOpen) setUrlValue('');
+            setError(''); 
+          }}
+          className={`relative p-2 rounded-md transition-all duration-200 ${
+            isOpen
+              ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+              : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+          }`}
+        >
+          <Video size={20} />
+          {/* Shortcut badge — matches ToolBtn style */}
+          <span className={`absolute -bottom-0.5 -right-0.5 text-[8px] font-mono leading-none px-1 py-[1px] rounded transition-colors ${
+            isOpen ? 'bg-[#0A0705]/40 text-[#0A0705]' : 'bg-[#2A1F15] text-[#7A6A55]'
+          }`}>
+            {formatKeyDisplay(shortcutKey)}
+          </span>
+        </button>
+      </Tooltip>
 
       {isOpen && (
-        <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden">
+        <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] rounded-[10px] shadow-2xl z-50 min-w-[200px] py-2 overflow-hidden`}>
           <div className="px-3 pb-1.5 border-b border-[#2A1F15] mb-1 flex items-center justify-between">
             <span className="text-[#7A6A55] text-[10px] uppercase tracking-widest font-inter font-semibold">Add YouTube Video</span>
           </div>
@@ -416,6 +432,69 @@ export default function Toolbar() {
   useEffect(() => { loadBindings(); }, [loadBindings]);
 
   const keyFor = (toolId: string) => bindings.find(b => b.toolId === toolId)?.currentKey || '';
+
+  // ── Toolbar dragging state ─────────────────────────────────────────────────
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDragUnlocked, setIsDragUnlocked] = useState(false);
+  const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
+  const [dragReady, setDragReady] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const holdTimerRef = useRef<number | null>(null);
+  const toolbarDragData = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (toolbarPos) {
+      setIsAtBottom(toolbarPos.y > window.innerHeight / 2);
+    } else {
+      setIsAtBottom(false);
+    }
+  }, [toolbarPos]);
+
+  const handleScroll = (offset: number) => {
+    if (scrollRef.current) scrollRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+  };
+
+  const handleGripMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragReady(false);
+    if (holdTimerRef.current) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdTimerRef.current = window.setTimeout(() => {
+      setIsDragUnlocked(true);
+      setDragReady(true);
+      const rect = toolbarRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const startX = rect.left;
+      const startY = rect.top;
+      toolbarDragData.current = { mx: e.clientX, my: e.clientY, ox: startX, oy: startY };
+      setIsDraggingToolbar(true);
+      const onMove = (ev: MouseEvent) => {
+        if (!toolbarDragData.current) return;
+        const d = toolbarDragData.current;
+        setToolbarPos({ x: d.ox + (ev.clientX - d.mx), y: d.oy + (ev.clientY - d.my) });
+      };
+      const onUp = () => {
+        setIsDraggingToolbar(false);
+        toolbarDragData.current = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }, 1000);
+    const cancelHold = () => {
+      if (holdTimerRef.current) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      setDragReady(false);
+      window.removeEventListener('mouseup', cancelHold);
+    };
+    window.addEventListener('mouseup', cancelHold);
+  }, []);
+
+  const toolbarStyle: React.CSSProperties = toolbarPos
+    ? { position: 'fixed', left: toolbarPos.x, top: toolbarPos.y, transform: 'none', transition: isDraggingToolbar ? 'none' : 'box-shadow 0.2s ease' }
+    : {};
 
   const [openPopoverTool, setOpenPopoverTool] = useState<Tool | 'image' | 'youtube' | null>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -520,7 +599,7 @@ export default function Toolbar() {
   };
 
   const renderSettingsPopover = (showFillToggle = false) => (
-    <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]">
+    <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]`}>
       <div className="w-full">
         <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Thickness: {strokeWidth}px</span>
         <input type="range" min="1" max="25" value={strokeWidth}
@@ -587,7 +666,49 @@ export default function Toolbar() {
   }
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-1 bg-[#0A0705CC] backdrop-blur-md border border-[#2A1F15] rounded-[12px] px-2 py-2 shadow-2xl">
+    <div
+      ref={toolbarRef}
+      className={`z-50 flex items-center gap-1 bg-[#0A0705CC] backdrop-blur-md border rounded-[12px] px-1 py-1 shadow-2xl transition-shadow duration-200 max-w-[95vw] md:max-w-[80vw] ${
+        toolbarPos ? 'border-[#C47C2B]/30' : 'absolute top-4 left-1/2 -translate-x-1/2 border-[#2A1F15]'
+      } ${isDraggingToolbar ? 'shadow-[0_0_32px_rgba(196,124,43,0.25)]' : ''}`}
+      style={toolbarStyle}
+    >
+      {/* ── Drag Grip Handle ────────────────────────────────────────────────── */}
+      <Tooltip label="Hold 1s to drag toolbar" isAtBottom={isAtBottom}>
+        <div
+          onMouseDown={handleGripMouseDown}
+          className={`flex items-center justify-center p-1.5 rounded-md flex-shrink-0 select-none transition-all duration-200 ${
+            dragReady || isDraggingToolbar
+              ? 'text-[#C47C2B] bg-[#C47C2B]/15 cursor-grabbing scale-110'
+              : 'text-[#3A2F25] hover:text-[#7A6A55] cursor-grab hover:bg-[#2A1F15]/50'
+          }`}
+          style={{ touchAction: 'none' }}
+        >
+          <GripVertical size={16} className={`transition-all duration-300 ${dragReady ? 'opacity-100' : 'opacity-60'}`} />
+        </div>
+      </Tooltip>
+      <div className="w-px h-5 bg-[#2A1F15] mx-0.5 flex-shrink-0" />
+
+      <button onClick={() => handleScroll(-200)} className="p-1 text-[#7A6A55] hover:text-[#F5ECD7] flex-shrink-0 transition-colors"><ChevronLeft size={18} /></button>
+
+      <div 
+        ref={scrollRef}
+        className="flex items-center overflow-x-auto scroll-smooth"
+        style={{
+          paddingTop: '250px', marginTop: '-250px',
+          paddingBottom: '250px', marginBottom: '-250px',
+          pointerEvents: 'none',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        <div 
+          className="flex items-center gap-1 pointer-events-auto px-1"
+          onWheel={(e) => {
+            if (scrollRef.current) scrollRef.current.scrollLeft += e.deltaY;
+          }}
+        >
+
 
       <ToolBtn tool="select" activeTool={activeTool} onClick={handleToolClick} icon={Pointer} label="Select" shortcutKey={keyFor('select')} />
       <ToolBtn tool="pan" activeTool={activeTool} onClick={handleToolClick} icon={Hand} label="Pan" shortcutKey={keyFor('pan')} />
@@ -602,7 +723,7 @@ export default function Toolbar() {
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
         <ToolBtn tool="eraser" activeTool={activeTool} onClick={handleToolClick} icon={Eraser} label="Eraser" shortcutKey={keyFor('eraser')} />
         {openPopoverTool === 'eraser' && (
-          <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-2 z-50">
+          <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-2 z-50`}>
             <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center mb-1">Eraser: {eraserSize}px</span>
             <input type="range" min="10" max="150" value={eraserSize}
               onChange={(e) => setEraserSize(Number(e.target.value))}
@@ -629,7 +750,7 @@ export default function Toolbar() {
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
         <ToolBtn tool="text" activeTool={activeTool} onClick={handleToolClick} icon={Type} label="Text" shortcutKey={keyFor('text')} />
         {openPopoverTool === 'text' && (
-          <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]">
+          <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]`}>
             <div className="w-full">
               <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Font Size: {Math.max(16, strokeWidth * 5)}px</span>
               <input type="range" min="1" max="25" value={strokeWidth}
@@ -669,8 +790,8 @@ export default function Toolbar() {
       <Divider />
 
       {/* ── Add Image & Video ──────────────────────────────────────────── */}
-      <AddImageButton isOpen={openPopoverTool === 'image'} onToggle={() => handlePopoverToggle('image')} />
-      <AddYouTubeButton isOpen={openPopoverTool === 'youtube'} onToggle={() => handlePopoverToggle('youtube')} />
+      <AddImageButton isOpen={openPopoverTool === 'image'} onToggle={() => handlePopoverToggle('image')} isAtBottom={isAtBottom} />
+      <AddYouTubeButton isOpen={openPopoverTool === 'youtube'} onToggle={() => handlePopoverToggle('youtube')} isAtBottom={isAtBottom} />
 
       <Divider />
 
@@ -709,21 +830,20 @@ export default function Toolbar() {
       }} icon={HeartPulse} label="Revive Tool" />
 
       {/* Lock button — locks selected element directly; enters lock-mode if nothing selected */}
-      <button
-        onClick={handleLockClick}
-        title={selectedElementId
-          ? isSelectedLocked ? 'Unlock selected element' : 'Lock selected element'
-          : activeTool === 'lock' ? 'Exit lock mode' : 'Enter lock mode (click elements to lock)'}
-        className={`p-2 rounded-md transition-all duration-200 ${
-          isSelectedLocked && selectedElementId
-            ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
-            : activeTool === 'lock'
-              ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
-              : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
-        }`}
-      >
-        {isSelectedLocked && selectedElementId ? <Unlock size={20} /> : <Lock size={20} />}
-      </button>
+      <Tooltip label={selectedElementId ? (isSelectedLocked ? 'Unlock selected element' : 'Lock selected element') : (activeTool === 'lock' ? 'Exit lock mode' : 'Enter lock mode (click elements to lock)')} isAtBottom={isAtBottom}>
+        <button
+          onClick={handleLockClick}
+          className={`p-2 rounded-md transition-all duration-200 ${
+            isSelectedLocked && selectedElementId
+              ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+              : activeTool === 'lock'
+                ? 'bg-[#C47C2B] text-[#0A0705] shadow-[0_0_15px_rgba(196,124,43,0.4)]'
+                : 'text-[#F5ECD7] hover:bg-[#2A1F15] hover:text-[#E8A44A]'
+          }`}
+        >
+          {isSelectedLocked && selectedElementId ? <Unlock size={20} /> : <Lock size={20} />}
+        </button>
+      </Tooltip>
 
       {/* Context: element selected → show color/crop/delete */}
       {selectedElementId && (
@@ -731,18 +851,19 @@ export default function Toolbar() {
           <Divider />
           {isColoredElement && (
             <div className="relative">
-              <button
-                onClick={() => setShowElementColorPicker(!showElementColorPicker)}
-                title="Change element color"
-                className="p-2 rounded-md transition-all duration-200 hover:bg-[#2A1F15]"
-              >
-                <div
-                  className="w-5 h-5 rounded-full border-2 border-[#2A1F15]"
-                  style={{ backgroundColor: selectedElement?.color || strokeColor }}
-                />
-              </button>
+              <Tooltip label="Change element color" isAtBottom={isAtBottom}>
+                <button
+                  onClick={() => setShowElementColorPicker(!showElementColorPicker)}
+                  className="p-2 rounded-md transition-all duration-200 hover:bg-[#2A1F15]"
+                >
+                  <div
+                    className="w-5 h-5 rounded-full border-2 border-[#2A1F15]"
+                    style={{ backgroundColor: selectedElement?.color || strokeColor }}
+                  />
+                </button>
+              </Tooltip>
               {showElementColorPicker && (
-                <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl z-50 min-w-[160px]">
+                <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl z-50 min-w-[160px]`}>
                   <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Element Color</span>
                   <div className="flex items-center gap-2">
                     <label
@@ -784,46 +905,60 @@ export default function Toolbar() {
       <Divider />
 
       {/* ── Group 4: History + Zoom ───────────────────────────── */}
-      <button onClick={undo} disabled={historyStep <= 0} title="Undo"
-        className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] disabled:opacity-30 transition-colors">
-        <Undo2 size={18} />
-      </button>
-      <button onClick={redo} disabled={historyStep >= history.length - 1} title="Redo"
-        className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] disabled:opacity-30 transition-colors">
-        <Redo2 size={18} />
-      </button>
+      <Tooltip label="Undo" isAtBottom={isAtBottom}>
+        <button onClick={undo} disabled={historyStep <= 0}
+          className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] disabled:opacity-30 transition-colors">
+          <Undo2 size={18} />
+        </button>
+      </Tooltip>
+      <Tooltip label="Redo" isAtBottom={isAtBottom}>
+        <button onClick={redo} disabled={historyStep >= history.length - 1}
+          className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] disabled:opacity-30 transition-colors">
+          <Redo2 size={18} />
+        </button>
+      </Tooltip>
 
       <Divider />
 
-      <button onClick={handleZoomOut} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomOut size={18} /></button>
+      <Tooltip label="Zoom Out" isAtBottom={isAtBottom}>
+        <button onClick={handleZoomOut} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomOut size={18} /></button>
+      </Tooltip>
       <span className="text-[#F5ECD7] font-inter text-xs font-medium w-11 text-center">{Math.round(zoom * 100)}%</span>
-      <button onClick={handleZoomIn} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomIn size={18} /></button>
+      <Tooltip label="Zoom In" isAtBottom={isAtBottom}>
+        <button onClick={handleZoomIn} className="p-2 text-[#7A6A55] hover:text-[#F5ECD7] transition-colors"><ZoomIn size={18} /></button>
+      </Tooltip>
       <Divider />
 
       {/* ── Group 5: Export ────────────────────────────────────── */}
-      <ExportButton />
+      <ExportButton isAtBottom={isAtBottom} />
 
       <Divider />
 
       {/* ── Group 5: Danger ───────────────────────────────────── */}
       {backgroundImage && (
-        <button
-          onClick={() => setBackgroundImage(null)}
-          title="Clear background map"
-          className="flex items-center gap-1 p-1.5 pl-2 pr-2.5 text-[#7A6A55] hover:text-amber-400 hover:bg-[#2A1F15] rounded-md transition-all text-[10px] font-inter border border-[#2A1F15] hover:border-amber-600/30"
-        >
-          <ImageOff size={14} />
-          <span className="hidden sm:inline">Clear Map</span>
-        </button>
+        <Tooltip label="Clear background map" isAtBottom={isAtBottom}>
+          <button
+            onClick={() => setBackgroundImage(null)}
+            className="flex items-center gap-1 p-1.5 pl-2 pr-2.5 text-[#7A6A55] hover:text-amber-400 hover:bg-[#2A1F15] rounded-md transition-all text-[10px] font-inter border border-[#2A1F15] hover:border-amber-600/30"
+          >
+            <ImageOff size={14} />
+            <span className="hidden sm:inline">Clear Map</span>
+          </button>
+        </Tooltip>
       )}
 
-      <button
-        onClick={clearElements}
-        title="Clear all drawings &amp; players"
-        className="p-2 text-red-500/70 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
-      >
-        <Trash2 size={18} />
-      </button>
+      <Tooltip label="Clear all drawings & players" isAtBottom={isAtBottom}>
+        <button
+          onClick={clearElements}
+          className="p-2 text-red-500/70 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
+        >
+          <Trash size={18} />
+        </button>
+      </Tooltip>
+        </div>
+      </div>
+
+      <button onClick={() => handleScroll(200)} className="p-1 text-[#7A6A55] hover:text-[#F5ECD7] flex-shrink-0 transition-colors"><ChevronRight size={18} /></button>
     </div>
   );
 }
