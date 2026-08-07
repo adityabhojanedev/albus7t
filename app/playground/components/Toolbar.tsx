@@ -418,6 +418,7 @@ export default function Toolbar() {
     clearElements, backgroundImage, setBackgroundImage,
     undo, redo, historyStep, history,
     eraserSize, setEraserSize, shapeFillType, toggleShapeFillType,
+    laserSmooth, setLaserSmooth,
     strokeColor, setStrokeColor, strokeWidth, setStrokeWidth,
     selectedElementId, removeElement, setSelectedElementId, elements, updateElement, commitHistory,
     toggleElementLock,
@@ -734,7 +735,54 @@ export default function Toolbar() {
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>
         <ToolBtn tool="laser" activeTool={activeTool} onClick={handleToolClick} icon={Zap} label="Laser" shortcutKey={keyFor('laser')} />
-        {openPopoverTool === 'laser' && renderSettingsPopover()}
+        {openPopoverTool === 'laser' && (
+          <div className={`absolute ${isAtBottom ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'} left-1/2 -translate-x-1/2 bg-[#0A0705] border border-[#2A1F15] p-3 rounded-[8px] shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[160px]`}>
+            <div className="w-full">
+              <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Thickness: {strokeWidth}px</span>
+              <input type="range" min="1" max="25" value={strokeWidth}
+                onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                className="w-full accent-[#C47C2B]" />
+            </div>
+            <div className="w-full">
+              <span className="text-[#7A6A55] text-[10px] font-inter uppercase tracking-widest font-semibold border-b border-[#2A1F15] pb-1 w-full text-center block mb-2">Color</span>
+              <div className="flex items-center gap-2">
+                <label
+                  className={`w-5 h-5 rounded-full border overflow-hidden cursor-pointer relative flex-shrink-0 transition-transform ${!colors.includes(strokeColor.toUpperCase()) && !colors.includes(strokeColor) ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'border-[#2A1F15] hover:scale-105'}`}
+                  title="Custom Color"
+                >
+                  <div className="absolute inset-0 rounded-full" style={{ background: 'conic-gradient(red, yellow, green, cyan, blue, magenta, red)' }} />
+                  <input
+                    type="color"
+                    value={strokeColor}
+                    onChange={(e) => handleColorChange(e.target.value)}
+                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                  />
+                </label>
+                <div className="w-[1px] h-4 bg-[#2A1F15]"></div>
+                <div className="flex gap-1.5 justify-center flex-wrap">
+                  {colors.map(c => (
+                    <button key={c} onClick={() => handleColorChange(c)}
+                      className={`w-4 h-4 rounded-full border ${strokeColor === c ? 'border-white scale-125' : 'border-black/50'} transition-transform`}
+                      style={{ backgroundColor: c }} title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="w-full pt-1">
+              <button onClick={() => setLaserSmooth(!laserSmooth)} title="Toggle smooth laser"
+                className={`flex items-center justify-center w-full gap-1.5 px-3 py-1.5 rounded transition-all text-xs font-sora ${
+                  laserSmooth
+                    ? 'bg-[#C47C2B]/20 text-[#C47C2B] border border-[#C47C2B]/50'
+                    : 'text-[#7A6A55] border border-transparent hover:text-[#F5ECD7] hover:bg-[#2A1F15]'
+                }`}
+              >
+                <Zap size={14} />
+                {laserSmooth ? 'Smooth Laser' : 'Normal Laser'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="relative" onMouseEnter={handleMouseEnterTool} onMouseLeave={handleMouseLeaveTool}>

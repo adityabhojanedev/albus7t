@@ -145,6 +145,9 @@ interface BoardState {
   eraserSize: number;
   setEraserSize: (size: number) => void;
 
+  laserSmooth: boolean;
+  setLaserSmooth: (smooth: boolean) => void;
+
   shapeFillType: 'transparent' | 'solid';
   toggleShapeFillType: () => void;
 
@@ -251,6 +254,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   eraserSize: 30,
   setEraserSize: (size) => set({ eraserSize: size }),
+
+  laserSmooth: true,
+  setLaserSmooth: (smooth) => set({ laserSmooth: smooth }),
 
   shapeFillType: 'transparent',
   toggleShapeFillType: () => set((state) => ({
