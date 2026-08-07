@@ -10,6 +10,150 @@ import gsap from 'gsap';
 import { setBoardStageRef } from '../hooks/useBoardStageRef';
 import YouTube, { YouTubeEvent, YouTubePlayer } from 'react-youtube';
 
+// ─── Laser Smoothing & Fade Utilities ─────────────────────────────────────────
+
+/** Chaikin curve subdivision — smooths raw polyline points.
+ *  Each iteration produces a smoother curve by cutting corners. */
+function smoothPoints(pts: number[], iterations = 3): number[] {
+  if (pts.length < 6) return pts; // need at least 3 points (6 coords)
+  let coords = pts;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next: number[] = [coords[0], coords[1]]; // keep first point
+    for (let i = 0; i < coords.length - 2; i += 2) {
+      const x0 = coords[i], y0 = coords[i + 1];
+      const x1 = coords[i + 2], y1 = coords[i + 3];
+      next.push(
+        0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1,
+        0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1
+      );
+    }
+    next.push(coords[coords.length - 2], coords[coords.length - 1]); // keep last
+    coords = next;
+  }
+  return coords;
+}
+
+/** Moving-average filter — smooths points in real-time without changing count.
+ *  Uses a sliding window to average out small mouse jitter/spikes. */
+function movingAverageSmooth(pts: number[], windowSize = 5): number[] {
+  const numPts = pts.length / 2;
+  if (numPts < 3) return pts;
+  const half = Math.floor(windowSize / 2);
+  const result: number[] = [pts[0], pts[1]]; // keep first point
+  for (let i = 1; i < numPts - 1; i++) {
+    let sumX = 0, sumY = 0, count = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(numPts - 1, i + half); j++) {
+      sumX += pts[j * 2];
+      sumY += pts[j * 2 + 1];
+      count++;
+    }
+    result.push(sumX / count, sumY / count);
+  }
+  result.push(pts[pts.length - 2], pts[pts.length - 1]); // keep last point
+  return result;
+}
+
+/** Insert midpoints between consecutive points to increase density.
+ *  Doesn't change the line shape — just gives the fade animation more granular steps. */
+function subdividePoints(pts: number[], iterations = 2): number[] {
+  let coords = pts;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next: number[] = [coords[0], coords[1]];
+    for (let i = 0; i < coords.length - 2; i += 2) {
+      const mx = (coords[i] + coords[i + 2]) / 2;
+      const my = (coords[i + 1] + coords[i + 3]) / 2;
+      next.push(mx, my, coords[i + 2], coords[i + 3]);
+    }
+    coords = next;
+  }
+  return coords;
+}
+
+/** Progressively erase a laser line from start → end.
+ *  Manipulates the Konva node directly (bypasses React) for smooth 60fps.
+ *  Returns a cleanup function to cancel the animation. */
+function startLaserFade(
+  elementId: string,
+  _updateElement: (id: string, props: Partial<DrawingElement>) => void,
+  removeElement: (id: string) => void,
+  totalPoints: number[],
+  fadeDuration = 1500, // ms
+  stageRef?: React.RefObject<Konva.Stage | null>
+): () => void {
+  const totalPairs = totalPoints.length / 2;
+  let cancelled = false;
+  let startTime: number | null = null;
+  const delayBeforeFade = 600;
+  let lastTrimPairs = -1; // track to skip no-op frames
+
+  // Pre-compute all trim keyframes to avoid allocations during animation
+  const keyframes: number[][] = [];
+  for (let i = 0; i <= totalPairs; i++) {
+    keyframes.push(totalPoints.slice(i * 2));
+  }
+
+  // Find the Konva Line node directly (bypass React)
+  let lineNode: Konva.Line | null = null;
+  let layerNode: Konva.Layer | null = null;
+
+  function findNode() {
+    if (lineNode) return true;
+    const stage = stageRef?.current;
+    if (!stage) return false;
+    const group = stage.findOne(`#${elementId}`) as Konva.Group | undefined;
+    if (!group) return false;
+    const children = group.getChildren();
+    for (const child of children) {
+      if (child instanceof Konva.Line) {
+        lineNode = child;
+        layerNode = child.getLayer();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function tick(now: number) {
+    if (cancelled) return;
+    if (startTime === null) startTime = now;
+    const elapsed = now - startTime;
+
+    if (elapsed < delayBeforeFade) {
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    const fadeElapsed = elapsed - delayBeforeFade;
+    const progress = Math.min(fadeElapsed / fadeDuration, 1);
+    const trimPairs = Math.floor(progress * totalPairs);
+
+    if (trimPairs >= totalPairs || progress >= 1) {
+      removeElement(elementId);
+      lineNode = null;
+      layerNode = null;
+      return;
+    }
+
+    // Only update when the visible portion actually changes
+    if (trimPairs !== lastTrimPairs) {
+      lastTrimPairs = trimPairs;
+
+      if (findNode() && lineNode) {
+        // Direct Konva manipulation — no React re-render
+        lineNode.points(keyframes[trimPairs]);
+        const opacity = progress > 0.7 ? 1 - ((progress - 0.7) / 0.3) * 0.6 : 0.9;
+        lineNode.opacity(opacity);
+        layerNode?.batchDraw();
+      }
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+  return () => { cancelled = true; lineNode = null; layerNode = null; };
+}
+
 // ─── Player Node ──────────────────────────────────────────────────────────────
 const PlayerNode = React.memo(function PlayerNode({
   player, team, updatePlayerPosition, commitHistory,
@@ -652,7 +796,7 @@ export default function TacticsCanvas() {
   const {
     activeTool, zoom, stagePosition, setZoomByWheel, setStagePosition,
     elements, addElement, updateElement, removeElement, backgroundImage, setBackgroundImage,
-    commitHistory, eraserSize, shapeFillType, strokeColor, strokeWidth,
+    commitHistory, eraserSize, shapeFillType, strokeColor, strokeWidth, laserSmooth,
     selectedElementId, setSelectedElementId, croppingElementId, setCroppingElementId,
     teams, updatePlayerPosition, addTeam,
     selectedPlayerId, setSelectedPlayerId,
@@ -671,6 +815,8 @@ export default function TacticsCanvas() {
   const trRef = useRef<Konva.Transformer>(null);
   const playerTrRef = useRef<Konva.Transformer>(null);
   const temporaryLayerRef = useRef<Konva.Layer>(null);
+  const laserFadeCleanups = useRef<Map<string, () => void>>(new Map());
+  const laserRawPointsRef = useRef<number[]>([]);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -972,6 +1118,7 @@ export default function TacticsCanvas() {
     setCurrentId(id);
 
     if (activeTool === 'pen' || activeTool === 'laser' || activeTool === 'eraser') {
+      if (activeTool === 'laser' && laserSmooth) laserRawPointsRef.current = [pointer.x, pointer.y];
       addElement({
         id, type: activeTool === 'eraser' ? 'eraser' : 'line',
         points: [pointer.x, pointer.y],
@@ -1019,8 +1166,15 @@ export default function TacticsCanvas() {
     if (!currentElement) return;
 
     if (activeTool === 'pen' || activeTool === 'laser' || activeTool === 'eraser') {
-      const newPoints = currentElement.points ? [...currentElement.points, pointer.x, pointer.y] : [pointer.x, pointer.y];
-      updateElement(currentId, { points: newPoints });
+      if (activeTool === 'laser' && laserSmooth) {
+        // Collect raw points, display smoothed version in real-time
+        laserRawPointsRef.current.push(pointer.x, pointer.y);
+        const smoothed = movingAverageSmooth(laserRawPointsRef.current, 7);
+        updateElement(currentId, { points: smoothed });
+      } else {
+        const newPoints = currentElement.points ? [...currentElement.points, pointer.x, pointer.y] : [pointer.x, pointer.y];
+        updateElement(currentId, { points: newPoints });
+      }
     } else if (activeTool === 'rectangle') {
       updateElement(currentId, {
         width: pointer.x - (currentElement.x || 0),
@@ -1066,7 +1220,33 @@ export default function TacticsCanvas() {
 
     if (activeTool === 'laser') {
       const idToRemove = currentId;
-      setTimeout(() => removeElement(idToRemove), 2500);
+      if (laserSmooth) {
+        const rawPts = laserRawPointsRef.current;
+        if (rawPts.length >= 4) {
+          // Apply same moving average as during drawing, then Chaikin for final polish
+          const averaged = movingAverageSmooth(rawPts, 7);
+          const smoothed = smoothPoints(averaged, 3);
+          updateElement(idToRemove, { points: smoothed });
+          laserRawPointsRef.current = [];
+          // Start progressive fade animation (A → B wipe)
+          const cancel = startLaserFade(idToRemove, updateElement, removeElement, smoothed, 1500, stageRef);
+          laserFadeCleanups.current.set(idToRemove, cancel);
+        } else {
+          laserRawPointsRef.current = [];
+          setTimeout(() => removeElement(idToRemove), 400);
+        }
+      } else {
+        // Normal laser — read fresh state (closure `elements` may be stale)
+        const freshEl = useBoardStore.getState().elements.find(e => e.id === idToRemove);
+        if (freshEl?.points && freshEl.points.length >= 4) {
+          // Subdivide for finer fade granularity (4x more steps without changing shape)
+          const densePoints = subdividePoints(freshEl.points, 2);
+          const cancel = startLaserFade(idToRemove, updateElement, removeElement, densePoints, 1500, stageRef);
+          laserFadeCleanups.current.set(idToRemove, cancel);
+        } else {
+          setTimeout(() => removeElement(idToRemove), 400);
+        }
+      }
     } else {
       commitHistory();
     }
@@ -1728,8 +1908,8 @@ export default function TacticsCanvas() {
             lineCap="round" lineJoin="round"
             globalCompositeOperation={el.type === 'eraser' ? 'destination-out' : 'source-over'}
             shadowColor={el.isLaser ? el.color : 'transparent'}
-            shadowBlur={el.isLaser ? 15 : 0}
-            opacity={el.isLaser ? 0.9 : 1}
+            shadowBlur={el.isLaser ? 20 : 0}
+            opacity={el.isLaser ? (el.opacity ?? 0.9) : 1}
             listening={false}
           />
           {isLocked && <LockBadge bx={bx} by={by} />}
