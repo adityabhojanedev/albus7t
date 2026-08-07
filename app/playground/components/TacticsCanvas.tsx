@@ -223,6 +223,10 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   const [duration, setDuration] = useState(0);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(true);
+  const [availableQualities, setAvailableQualities] = useState<string[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<string>('');
+  const isScrubbing = useRef(false);
+  const scrubTrackRef = useRef<HTMLDivElement>(null);
 
   // ── Screen-space position/size (drives DOM, updated in real-time) ──────
   const toScreen = () => ({
@@ -349,12 +353,13 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
     window.addEventListener('mouseup', onUp);
   };
 
-  // ── Playback progress ticker ────────────────────────────────────────────
+  // ── Playback progress ticker ───────────────────────────────────────────────
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (playing && ytPlayer) {
       interval = setInterval(() => {
         try {
+          if (isScrubbing.current) return;
           const ct = ytPlayer.getCurrentTime();
           const d  = ytPlayer.getDuration();
           if (d > 0) { setCurrentTime(ct); setDuration(d); setProgress(ct / d); }
@@ -365,6 +370,41 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
     }
     return () => clearInterval(interval);
   }, [playing, ytPlayer]);
+
+  // ── Quality label formatter ────────────────────────────────────────────────
+  const qualityLabel = (q: string) => {
+    const map: Record<string, string> = {
+      highres: '4K', hd2160: '4K', hd1440: '1440p', hd1080: '1080p',
+      hd720: '720p', large: '480p', medium: '360p', small: '240p',
+      tiny: '144p', auto: 'Auto',
+    };
+    return map[q] || q.toUpperCase();
+  };
+
+  // ── Smooth draggable scrubber ──────────────────────────────────────────────
+  const handleScrubStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!ytPlayer) return;
+    isScrubbing.current = true;
+    const seek = (clientX: number) => {
+      const rect = scrubTrackRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const dur = ytPlayer.getDuration();
+      setProgress(pct);
+      setCurrentTime(dur * pct);
+      ytPlayer.seekTo(dur * pct, true);
+    };
+    seek(e.clientX);
+    const onMove = (ev: MouseEvent) => seek(ev.clientX);
+    const onUp = () => {
+      isScrubbing.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const resizeHandles: { dir: ResizeDir; style: React.CSSProperties; cursor: string }[] = [
     { dir: 'nw', style: { top: 0,    left: 0 },                                  cursor: 'nwse-resize' },
@@ -404,8 +444,22 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
             onReady={(e: YouTubeEvent) => {
               setYtPlayer(e.target);
               try { setDuration(e.target.getDuration()); } catch {}
+              try {
+                const qualities = e.target.getAvailableQualityLevels();
+                if (qualities && qualities.length > 0) setAvailableQualities(qualities);
+                setCurrentQuality(e.target.getPlaybackQuality());
+              } catch {}
             }}
-            onStateChange={(e: YouTubeEvent) => setPlaying(e.data === 1)}
+            onPlaybackQualityChange={(e: YouTubeEvent) => setCurrentQuality(e.data)}
+            onStateChange={(e: YouTubeEvent) => {
+              setPlaying(e.data === 1);
+              try {
+                const qualities = e.target.getAvailableQualityLevels();
+                if (qualities && qualities.length > 0) {
+                  setAvailableQualities(qualities);
+                }
+              } catch {}
+            }}
             className="w-full h-full bg-black pointer-events-none"
           />
         </div>
@@ -518,28 +572,21 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
             </button>
 
             <div 
-              className={`flex items-center overflow-hidden transition-all duration-300 ease-in-out ${isTimelineExpanded ? 'max-w-[800px] w-[80vw] opacity-100 gap-4 ml-3 pr-2' : 'max-w-0 w-[80vw] opacity-0 gap-0 ml-0 pr-0'}`}
+              className={`flex items-center overflow-hidden transition-all duration-300 ease-in-out ${isTimelineExpanded ? 'max-w-[800px] w-[90vw] opacity-100 gap-4 ml-3 pr-2' : 'max-w-0 w-[90vw] opacity-0 gap-0 ml-0 pr-0'}`}
             >
               <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12 text-right">
                 {formatTime(currentTime)}
               </span>
 
               <div
+                ref={scrubTrackRef}
                 className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber"
                 onMouseLeave={() => setHoverPct(null)}
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
                 }}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (!ytPlayer) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                  const dur  = ytPlayer.getDuration();
-                  ytPlayer.seekTo(dur * pct, true);
-                  setProgress(pct); setCurrentTime(dur * pct);
-                }}
+                onMouseDown={handleScrubStart}
               >
                 <div className="absolute top-0 left-0 h-full bg-[#C47C2B] group-hover/scrubber:bg-[#E8A44A] transition-colors rounded-full" style={{ width: `${progress * 100}%` }} />
                 {hoverPct !== null && duration > 0 && (
@@ -556,6 +603,18 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
                 {formatTime(duration)}
               </span>
             </div>
+
+            {/* ── Quality Status ────────────────────────────────────── */}
+            {currentQuality && (
+              <div className="relative ml-2 flex-shrink-0">
+                <span
+                  title="YouTube dynamically controls video quality based on connection and screen size"
+                  className="text-[#7A6A55] text-[10px] font-mono border border-[#3A2A1D] bg-[#1A0F08] px-1.5 py-0.5 rounded cursor-default inline-block"
+                >
+                  {qualityLabel(currentQuality)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
