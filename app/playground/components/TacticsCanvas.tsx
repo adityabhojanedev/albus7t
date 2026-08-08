@@ -361,7 +361,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   element: DrawingElement; zoom: number; stagePosition: Point; activeTool: string;
 }) => {
   const [ytPlayer, setYtPlayer] = useState<YouTubePlayer | null>(null);
-  const [playing, setPlaying]   = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -369,6 +369,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(true);
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
   const [currentQuality, setCurrentQuality] = useState<string>('');
+  const [showNativeControls, setShowNativeControls] = useState(false);
   const isScrubbing = useRef(false);
   const scrubTrackRef = useRef<HTMLDivElement>(null);
 
@@ -376,7 +377,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   const toScreen = () => ({
     sl: stagePosition.x + (element.x || 0) * zoom,
     st: stagePosition.y + (element.y || 0) * zoom,
-    sw: (element.width  || 480) * zoom,
+    sw: (element.width || 480) * zoom,
     sh: (element.height || 270) * zoom,
   });
 
@@ -387,12 +388,12 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   const screen = activeGesture.current ? localScreen : toScreen();
 
   // Always-fresh refs so event handlers never have stale values
-  const zoomRef         = useRef(zoom);
-  const stagePosRef     = useRef(stagePosition);
-  const screenRef       = useRef(screen);
-  useEffect(() => { zoomRef.current = zoom; },          [zoom]);
+  const zoomRef = useRef(zoom);
+  const stagePosRef = useRef(stagePosition);
+  const screenRef = useRef(screen);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { stagePosRef.current = stagePosition; }, [stagePosition]);
-  useEffect(() => { screenRef.current = screen; },       [screen]);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
 
   // ── Drag ───────────────────────────────────────────────────────────────
   const dragData = useRef<{ mx: number; my: number; osl: number; ost: number } | null>(null);
@@ -483,7 +484,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
       updateElement(element.id, {
         x: (nl - sp.x) / z,
         y: (nt - sp.y) / z,
-        width:  nw / z,
+        width: nw / z,
         height: nh / z,
       });
       commitHistory();
@@ -505,12 +506,12 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
         try {
           if (isScrubbing.current) return;
           const ct = ytPlayer.getCurrentTime();
-          const d  = ytPlayer.getDuration();
+          const d = ytPlayer.getDuration();
           if (d > 0) { setCurrentTime(ct); setDuration(d); setProgress(ct / d); }
         } catch { /* ignore */ }
       }, 250);
     } else if (ytPlayer) {
-      try { setCurrentTime(ytPlayer.getCurrentTime()); setDuration(ytPlayer.getDuration()); } catch {}
+      try { setCurrentTime(ytPlayer.getCurrentTime()); setDuration(ytPlayer.getDuration()); } catch { }
     }
     return () => clearInterval(interval);
   }, [playing, ytPlayer]);
@@ -551,14 +552,14 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
   };
 
   const resizeHandles: { dir: ResizeDir; style: React.CSSProperties; cursor: string }[] = [
-    { dir: 'nw', style: { top: 0,    left: 0 },                                  cursor: 'nwse-resize' },
-    { dir: 'ne', style: { top: 0,    right: 0 },                                 cursor: 'nesw-resize' },
-    { dir: 'sw', style: { bottom: 0, left: 0 },                                  cursor: 'nesw-resize' },
-    { dir: 'se', style: { bottom: 0, right: 0 },                                 cursor: 'nwse-resize' },
-    { dir: 'n',  style: { top: 0,    left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
-    { dir: 's',  style: { bottom: 0, left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
-    { dir: 'w',  style: { left: 0,   top: '50%',  transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
-    { dir: 'e',  style: { right: 0,  top: '50%',  transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+    { dir: 'nw', style: { top: 0, left: 0 }, cursor: 'nwse-resize' },
+    { dir: 'ne', style: { top: 0, right: 0 }, cursor: 'nesw-resize' },
+    { dir: 'sw', style: { bottom: 0, left: 0 }, cursor: 'nesw-resize' },
+    { dir: 'se', style: { bottom: 0, right: 0 }, cursor: 'nwse-resize' },
+    { dir: 'n', style: { top: 0, left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { dir: 's', style: { bottom: 0, left: '50%', transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { dir: 'w', style: { left: 0, top: '50%', transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+    { dir: 'e', style: { right: 0, top: '50%', transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
   ];
 
   const { sl, st, sw, sh } = screen;
@@ -566,33 +567,37 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
 
   return (
     <>
-      {/* ── 1. Video box ─ below Stage (z-5) so Konva can select it ──────────
-          overflow:hidden clips the iframe so YouTube chrome is hidden        */}
+      {/* ── 1. Video box ─ z-5 normally, z-32 when native YT controls are active
+          so iframe sits above the z-30 interaction overlay and is fully clickable */}
       <div
         className="absolute bg-black border-[2.5px] border-[#3A2A1D] rounded-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
-        style={{ left: sl, top: st, width: sw, height: sh, zIndex: 5, userSelect: 'none' }}
+        style={{ left: sl, top: st, width: sw, height: sh, zIndex: showNativeControls ? 32 : 5, userSelect: 'none' }}
       >
-        {/* Iframe overflow-crop: -56px hides YT title bar, -42px hides control bar */}
-        <div className="absolute pointer-events-none" style={{ top: -56, left: 0, right: 0, bottom: -42 }}>
+        {/* Iframe wrapper — controls=1 always (single load, never remounts).
+            Custom mode: crop top/bottom -60px to fully hide YT title bar & control bar, block pointer-events.
+            Native mode: no crop, pointer-events enabled, user can access YT settings. */}
+        <div
+          className={showNativeControls ? 'absolute inset-0' : 'absolute pointer-events-none'}
+          style={showNativeControls ? undefined : { top: -60, left: 0, right: 0, bottom: -60 }}
+        >
           <YouTube
             videoId={element.youtubeUrl}
             opts={{
               width: '100%', height: '100%',
               playerVars: {
-                controls: 0, disablekb: 1, rel: 0,
+                controls: 1, disablekb: 1, rel: 0,
                 modestbranding: 1, playsinline: 1,
-                showinfo: 0, iv_load_policy: 3,
-                fs: 0, autoplay: 0, cc_load_policy: 0,
+                iv_load_policy: 3, fs: 0, autoplay: 0,
               }
             }}
             onReady={(e: YouTubeEvent) => {
               setYtPlayer(e.target);
-              try { setDuration(e.target.getDuration()); } catch {}
+              try { setDuration(e.target.getDuration()); } catch { }
               try {
                 const qualities = e.target.getAvailableQualityLevels();
                 if (qualities && qualities.length > 0) setAvailableQualities(qualities);
                 setCurrentQuality(e.target.getPlaybackQuality());
-              } catch {}
+              } catch { }
             }}
             onPlaybackQualityChange={(e: YouTubeEvent) => setCurrentQuality(e.data)}
             onStateChange={(e: YouTubeEvent) => {
@@ -602,19 +607,55 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
                 if (qualities && qualities.length > 0) {
                   setAvailableQualities(qualities);
                 }
-              } catch {}
+              } catch { }
             }}
-            className="w-full h-full bg-black pointer-events-none"
+            className={`w-full h-full bg-black ${showNativeControls ? '' : 'pointer-events-none'}`}
           />
         </div>
-        {/* Full-cover guard — stops any YT watermark/button clicks */}
-        <div className="absolute inset-0 z-10 pointer-events-none" />
+        {/* In custom mode: block interaction + opaque covers to hide YT native chrome.
+            YouTube positions its progress bar within the iframe viewport, so CSS crop alone
+            isn't enough — these gradient bars mask the title bar (top) and controls (bottom). */}
+        {!showNativeControls && (
+          <>
+            <div className="absolute inset-0 z-10 pointer-events-none" />
+            {/* Top cover — hides YouTube title bar / watermark */}
+            <div
+              className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+              style={{ height: 48, background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' }}
+            />
+            {/* Bottom cover — hides YouTube native progress bar & controls */}
+            <div
+              className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
+              style={{ height: 52, background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 60%, transparent 100%)' }}
+            />
+          </>
+        )}
       </div>
+
+      {/* ── Settings toggle icon — z-35 (always above everything) ─────────── */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowNativeControls(prev => !prev);
+        }}
+        className={`absolute w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 pointer-events-auto cursor-pointer backdrop-blur-md border ${showNativeControls
+            ? 'bg-[#C47C2B] border-[#E8A44A] text-[#0A0705] shadow-[0_0_12px_rgba(196,124,43,0.5)]'
+            : 'bg-[#0A0705CC] border-[#3A2A1D] text-[#7A6A55] hover:text-[#C47C2B] hover:border-[#C47C2B]/50'
+          }`}
+        style={{ left: sl + sw - 36, top: st + 8, zIndex: 35 }}
+        title={showNativeControls ? 'Back to custom controls' : 'Show YouTube settings (quality, subtitles, etc.)'}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
 
       {/* ── 2. Interaction overlay ─ z-30 (above Stage at z-10) ─────────────
           NOT inside overflow:hidden so handles are never clipped.
-          pointer-events-none on wrapper; auto only on interactive children.  */}
-      {activeTool === 'select' && (
+          pointer-events-none on wrapper; auto only on interactive children.
+          Hidden when native YT controls are active (video box jumps to z-32). */}
+      {activeTool === 'select' && !showNativeControls && (
         <div
           className="absolute pointer-events-none"
           style={{ left: sl - 6, top: st - 6, width: sw + 12, height: sh + 12, zIndex: 30 }}
@@ -670,7 +711,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
             title="Delete Video"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6L6 18M6 6l12 12"/>
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -678,12 +719,12 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
 
       {/* ── 3. Custom playback controls ─ z-20 (above Stage) ────────────────
           Separate from the interaction overlay so they don't interfere        */}
-      {isInteractive && (
+      {isInteractive && !showNativeControls && (
         <div
           className="absolute pointer-events-none flex items-end justify-center pb-3 px-3 group/ctrl"
           style={{ left: sl, top: st, width: sw, height: sh, zIndex: 20 }}
         >
-          <div className={`pointer-events-auto flex items-center bg-[#0A0705E6] backdrop-blur-xl border border-[#3A2A1D] rounded-2xl shadow-2xl transition-all duration-300 w-max max-w-[90%] px-3 py-3 ${playing ? 'opacity-0 group-hover/ctrl:opacity-100' : 'opacity-100'}`}>
+          <div className={`pointer-events-auto flex items-center bg-[#0A0705E6] backdrop-blur-xl border border-[#3A2A1D] rounded-2xl shadow-2xl transition-all duration-300 px-3 py-3 ${playing ? 'opacity-0 group-hover/ctrl:opacity-100' : 'opacity-100'}`} style={{ width: '90%' }}>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -692,7 +733,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
               className="text-[#7A6A55] hover:text-[#C47C2B] transition-colors p-0.5 flex-shrink-0 mr-1 opacity-60 hover:opacity-100 cursor-pointer"
               title={isTimelineExpanded ? "Collapse Timeline" : "Expand Timeline"}
             >
-              <svg 
+              <svg
                 width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                 className={`transition-transform duration-300 ${isTimelineExpanded ? 'rotate-180' : 'rotate-0'}`}
               >
@@ -709,14 +750,14 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
               className="text-[#C47C2B] hover:text-[#E8A44A] transition-colors p-1 flex-shrink-0 cursor-pointer"
             >
               {playing ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><polygon points="5,3 19,12 5,21"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="cursor-pointer"><polygon points="5,3 19,12 5,21" /></svg>
               )}
             </button>
 
-            <div 
-              className={`flex items-center overflow-hidden transition-all duration-300 ease-in-out ${isTimelineExpanded ? 'max-w-[800px] w-[90vw] opacity-100 gap-4 ml-3 pr-2' : 'max-w-0 w-[90vw] opacity-0 gap-0 ml-0 pr-0'}`}
+            <div
+              className={`flex items-center overflow-hidden transition-all duration-300 ease-in-out ${isTimelineExpanded ? 'flex-1 min-w-0 opacity-100 gap-4 ml-3 pr-2' : 'max-w-0 w-0 opacity-0 gap-0 ml-0 pr-0'}`}
             >
               <span className="text-[#F5ECD7] text-xs font-mono flex-shrink-0 opacity-80 w-12 text-right">
                 {formatTime(currentTime)}
@@ -724,7 +765,7 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
 
               <div
                 ref={scrubTrackRef}
-                className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber"
+                className="flex-grow h-2.5 bg-[#2A1F15] rounded-full relative cursor-pointer group/scrubber min-w-0"
                 onMouseLeave={() => setHoverPct(null)}
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
@@ -764,8 +805,8 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
       )}
 
       {/* ── 4. Center Play/Pause Overlay ─ z-20 ────────────────────────────── */}
-      {isInteractive && (
-        <div 
+      {isInteractive && !showNativeControls && (
+        <div
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 group/center-play"
           style={{ left: sl, top: st, width: sw, height: sh }}
         >
@@ -779,9 +820,9 @@ const YouTubeBox = ({ element, zoom, stagePosition, activeTool }: {
             className="pointer-events-auto bg-[#0A0705CC] hover:bg-[#C47C2B] backdrop-blur-md text-[#C47C2B] hover:text-[#0A0705] border border-[#C47C2B]/40 rounded-full w-20 h-20 flex items-center justify-center shadow-[0_0_40px_rgba(196,124,43,0.3)] hover:scale-110 transition-all opacity-0 group-hover/ytbox:opacity-100 hover:opacity-100"
           >
             {playing ? (
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
             ) : (
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="ml-1"><polygon points="5,3 21,12 5,21"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="ml-1"><polygon points="5,3 21,12 5,21" /></svg>
             )}
           </button>
         </div>
@@ -1453,14 +1494,14 @@ export default function TacticsCanvas() {
       // Arrow 1: starts at edge of P1 circle, points toward P2
       const a1StartX = ax + Math.cos(angle1to2) * PLAYER_R;
       const a1StartY = ay + Math.sin(angle1to2) * PLAYER_R;
-      const a1EndX   = ax + Math.cos(angle1to2) * (PLAYER_R + ARROW_LEN);
-      const a1EndY   = ay + Math.sin(angle1to2) * (PLAYER_R + ARROW_LEN);
+      const a1EndX = ax + Math.cos(angle1to2) * (PLAYER_R + ARROW_LEN);
+      const a1EndY = ay + Math.sin(angle1to2) * (PLAYER_R + ARROW_LEN);
 
       // Arrow 2: starts at edge of P2 circle, points toward P1
       const a2StartX = vx + Math.cos(angle2to1) * PLAYER_R;
       const a2StartY = vy + Math.sin(angle2to1) * PLAYER_R;
-      const a2EndX   = vx + Math.cos(angle2to1) * (PLAYER_R + ARROW_LEN);
-      const a2EndY   = vy + Math.sin(angle2to1) * (PLAYER_R + ARROW_LEN);
+      const a2EndX = vx + Math.cos(angle2to1) * (PLAYER_R + ARROW_LEN);
+      const a2EndY = vy + Math.sin(angle2to1) * (PLAYER_R + ARROW_LEN);
 
       const arrow1 = new Konva.Arrow({
         points: [a1StartX, a1StartY, a1EndX, a1EndY],
@@ -1957,7 +1998,7 @@ export default function TacticsCanvas() {
     }
     if (el.type === 'image' && el.image) {
       const isCropping = croppingElementId === el.id;
-      const dispW = el.crop ? el.crop.width  : (el.width  || el.image.width);
+      const dispW = el.crop ? el.crop.width : (el.width || el.image.width);
       const dispH = el.crop ? el.crop.height : (el.height || el.image.height);
       if (isCropping) {
         const imgX = el.crop ? -el.crop.x : 0;
@@ -2076,9 +2117,8 @@ export default function TacticsCanvas() {
 
   return (
     <div
-      className={`absolute inset-0 bg-[#0F0A06] overflow-hidden ${cursorClass} outline-none pointer-events-auto transition-shadow duration-200 ${
-        isDragOver ? 'shadow-[inset_0_0_0_3px_rgba(196,124,43,0.55),inset_0_0_50px_rgba(196,124,43,0.08)]' : ''
-      }`}
+      className={`absolute inset-0 bg-[#0F0A06] overflow-hidden ${cursorClass} outline-none pointer-events-auto transition-shadow duration-200 ${isDragOver ? 'shadow-[inset_0_0_0_3px_rgba(196,124,43,0.55),inset_0_0_50px_rgba(196,124,43,0.08)]' : ''
+        }`}
       style={{ cursor: cursorClass }}
       tabIndex={0}
       onDragOver={(e) => { e.preventDefault(); if (!isDragOver) setIsDragOver(true); }}
@@ -2095,11 +2135,11 @@ export default function TacticsCanvas() {
           const pos = stage.position();
           const rect = e.currentTarget.getBoundingClientRect();
           const canvasX = (e.clientX - rect.left - pos.x) / scale;
-          const canvasY = (e.clientY - rect.top  - pos.y) / scale;
-          
+          const canvasY = (e.clientY - rect.top - pos.y) / scale;
+
           try {
             const items = JSON.parse(galleryRaw) as { sourceUrl: string }[];
-            
+
             Promise.all(items.map(item => {
               return new Promise<HTMLImageElement>((resolve) => {
                 const img = new window.Image();
@@ -2113,8 +2153,8 @@ export default function TacticsCanvas() {
               if (validImages.length === 0) return;
 
               // Max dimension scaling logic
-              const maxW  = stage.width()  / scale * 0.5;
-              const maxH  = stage.height() / scale * 0.5;
+              const maxW = stage.width() / scale * 0.5;
+              const maxH = stage.height() / scale * 0.5;
 
               // Prevent upscaling: cap the ratio at 1
               const baseRatios = validImages.map(img => Math.min(1, maxW / img.width, maxH / img.height));
@@ -2128,11 +2168,11 @@ export default function TacticsCanvas() {
               const newElements = validImages.map((img, i) => {
                 const w = widths[i];
                 const h = heights[i];
-                
+
                 const targetX = currentXOffset;
                 const targetY = canvasY - h / 2;
                 currentXOffset += w + gap;
-                
+
                 return {
                   id: Math.random().toString(36).substring(2, 9),
                   type: 'image' as const,
@@ -2161,7 +2201,7 @@ export default function TacticsCanvas() {
                 const now = performance.now();
                 let progress = (now - startTime) / duration;
                 if (progress > 1) progress = 1;
-                
+
                 // easeOutQuart for a snappy but smooth landing
                 const ease = 1 - Math.pow(1 - progress, 4);
 
@@ -2200,7 +2240,7 @@ export default function TacticsCanvas() {
           const pos = stage.position();
           const rect = e.currentTarget.getBoundingClientRect();
           const canvasX = (e.clientX - rect.left - pos.x) / scale;
-          const canvasY = (e.clientY - rect.top  - pos.y) / scale;
+          const canvasY = (e.clientY - rect.top - pos.y) / scale;
 
           try {
             const { sourceUrl } = JSON.parse(mapRaw) as { sourceUrl: string };
@@ -2208,10 +2248,10 @@ export default function TacticsCanvas() {
             img.crossOrigin = 'Anonymous';
             img.src = sourceUrl;
             img.onload = () => {
-              const maxW  = Math.min(img.width,  stage.width()  / scale * 0.8);
-              const maxH  = Math.min(img.height, stage.height() / scale * 0.8);
+              const maxW = Math.min(img.width, stage.width() / scale * 0.8);
+              const maxH = Math.min(img.height, stage.height() / scale * 0.8);
               const ratio = Math.min(maxW / img.width, maxH / img.height);
-              const w = img.width  * ratio;
+              const w = img.width * ratio;
               const h = img.height * ratio;
               addElement({
                 id: Math.random().toString(36).substring(2, 9),
@@ -2245,7 +2285,7 @@ export default function TacticsCanvas() {
             const pos = stage.position();
             const rect = e.currentTarget.getBoundingClientRect();
             const canvasX = (e.clientX - rect.left - pos.x) / scale;
-            const canvasY = (e.clientY - rect.top  - pos.y) / scale;
+            const canvasY = (e.clientY - rect.top - pos.y) / scale;
 
             const reader = new FileReader();
             reader.onload = (evt) => {
@@ -2253,10 +2293,10 @@ export default function TacticsCanvas() {
               const img = new window.Image();
               img.src = dataUrl;
               img.onload = () => {
-                const maxW  = Math.min(img.width,  stage.width()  / scale * 0.8);
-                const maxH  = Math.min(img.height, stage.height() / scale * 0.8);
+                const maxW = Math.min(img.width, stage.width() / scale * 0.8);
+                const maxH = Math.min(img.height, stage.height() / scale * 0.8);
                 const ratio = Math.min(maxW / img.width, maxH / img.height);
-                const w = img.width  * ratio;
+                const w = img.width * ratio;
                 const h = img.height * ratio;
                 addElement({
                   id: Math.random().toString(36).substring(2, 9),
@@ -2305,59 +2345,80 @@ export default function TacticsCanvas() {
         <Stage
           className="pointer-events-auto"
           width={windowSize.width}
-        height={windowSize.height}
-        onClick={checkDeselect}
-        onTap={checkDeselect}
-        onWheel={handleWheel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        draggable={activeTool === 'pan'}
-        onDragMove={(e) => {
-          if (e.target === e.currentTarget) {
-            setStagePosition({ x: e.target.x(), y: e.target.y() });
-          }
-        }}
-        onDragEnd={(e) => {
-          if (e.target === e.currentTarget) {
-            setStagePosition({ x: e.target.x(), y: e.target.y() });
-          }
-        }}
-        x={stagePosition.x}
-        y={stagePosition.y}
-        scaleX={zoom}
-        scaleY={zoom}
-        ref={stageRef}
-      >
-        {/* Background */}
-        <Layer id="background">
-          {backgroundImage && (
-            <KonvaImage image={backgroundImage} x={0} y={0} opacity={0.8} />
-          )}
-        </Layer>
+          height={windowSize.height}
+          onClick={checkDeselect}
+          onTap={checkDeselect}
+          onWheel={handleWheel}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          draggable={activeTool === 'pan'}
+          onDragMove={(e) => {
+            if (e.target === e.currentTarget) {
+              setStagePosition({ x: e.target.x(), y: e.target.y() });
+            }
+          }}
+          onDragEnd={(e) => {
+            if (e.target === e.currentTarget) {
+              setStagePosition({ x: e.target.x(), y: e.target.y() });
+            }
+          }}
+          x={stagePosition.x}
+          y={stagePosition.y}
+          scaleX={zoom}
+          scaleY={zoom}
+          ref={stageRef}
+        >
+          {/* Background */}
+          <Layer id="background">
+            {backgroundImage && (
+              <KonvaImage image={backgroundImage} x={0} y={0} opacity={0.8} />
+            )}
+          </Layer>
 
-        {/* Locked elements — own canvas, completely immune to eraser destination-out */}
-        <Layer id="locked">
-          {elements.filter(el => el.isLocked && el.type !== 'eraser').map(renderElementNode)}
-        </Layer>
+          {/* Locked elements — own canvas, completely immune to eraser destination-out */}
+          <Layer id="locked">
+            {elements.filter(el => el.isLocked && el.type !== 'eraser').map(renderElementNode)}
+          </Layer>
 
-        {/* Drawings + Players — eraser operates only on this layer's canvas */}
-        <Layer id="drawings">
-          {/* Only unlocked elements (and locked erasers, which are edge-case) */}
-          {elements.filter(el => !el.isLocked || el.type === 'eraser').map(renderElementNode)}
+          {/* Drawings + Players — eraser operates only on this layer's canvas */}
+          <Layer id="drawings">
+            {/* Only unlocked elements (and locked erasers, which are edge-case) */}
+            {elements.filter(el => !el.isLocked || el.type === 'eraser').map(renderElementNode)}
 
-          {/* Animation paths (saved per-player) */}
-          {teams.map(team =>
-            team.players.map(player => {
-              if (!player.animationPath || player.animationPath.length < 4) return null;
+            {/* Animation paths (saved per-player) */}
+            {teams.map(team =>
+              team.players.map(player => {
+                if (!player.animationPath || player.animationPath.length < 4) return null;
+                return (
+                  <Line
+                    key={`path-${player.id}`}
+                    points={player.animationPath}
+                    stroke={team.themeColor}
+                    strokeWidth={2}
+                    opacity={0.4}
+                    dash={[8, 5]}
+                    lineCap="round"
+                    lineJoin="round"
+                    listening={false}
+                    strokeScaleEnabled={false}
+                    tension={0.3}
+                  />
+                );
+              })
+            )}
+
+            {/* Draft path while drawing */}
+            {isDrawingPath && draftPath.length >= 4 && (() => {
+              const team = pathTargetTeamId ? teams.find(t => t.id === pathTargetTeamId) : null;
+              const color = team?.themeColor || '#C47C2B';
               return (
                 <Line
-                  key={`path-${player.id}`}
-                  points={player.animationPath}
-                  stroke={team.themeColor}
+                  points={draftPath}
+                  stroke={color}
                   strokeWidth={2}
-                  opacity={0.4}
-                  dash={[8, 5]}
+                  opacity={0.6}
+                  dash={[6, 4]}
                   lineCap="round"
                   lineJoin="round"
                   listening={false}
@@ -2365,210 +2426,189 @@ export default function TacticsCanvas() {
                   tension={0.3}
                 />
               );
-            })
-          )}
+            })()}
 
-          {/* Draft path while drawing */}
-          {isDrawingPath && draftPath.length >= 4 && (() => {
-            const team = pathTargetTeamId ? teams.find(t => t.id === pathTargetTeamId) : null;
-            const color = team?.themeColor || '#C47C2B';
-            return (
-              <Line
-                points={draftPath}
-                stroke={color}
-                strokeWidth={2}
-                opacity={0.6}
-                dash={[6, 4]}
-                lineCap="round"
-                lineJoin="round"
-                listening={false}
-                strokeScaleEnabled={false}
-                tension={0.3}
+            {/* Players */}
+            {teams.map(team => (
+              <React.Fragment key={team.id}>
+                {team.players.map(player => (
+                  <PlayerNode
+                    key={player.id}
+                    player={player}
+                    team={team}
+                    updatePlayerPosition={updatePlayerPosition}
+                    commitHistory={commitHistory}
+                    activeTool={activeTool}
+                    onSelect={() => setSelectedPlayerId(player.id)}
+                    setEditingTeamId={(id) => { setEditingTeamId(id); setAddTeamModalOpen(true); }}
+                    onToggleLock={() => togglePlayerLock(team.id, player.id)}
+                    onPathClick={() => {
+                      if (!isDrawingPath) {
+                        setPathTargetPlayerId(player.id);
+                        setPathTargetTeamId(team.id);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.evt.preventDefault();
+                      e.cancelBubble = true;
+                      const stage = stageRef.current;
+                      if (!stage) return;
+                      const container = stage.container().getBoundingClientRect();
+                      const pointerPos = stage.getPointerPosition();
+                      if (!pointerPos) return;
+                      setContextMenu({
+                        playerId: player.id,
+                        teamId: team.id,
+                        screenX: pointerPos.x + container.left,
+                        screenY: pointerPos.y + container.top,
+                        status: player.status || 'alive',
+                      });
+                    }}
+                    onFightClick={() => {
+                      if (player.status !== 'alive') return; // only alive players
+                      if (stagedFight.step === 'selectP1') {
+                        setStagedFight({ p1Id: player.id, p1TeamId: team.id, step: 'drawP1' });
+                      } else if (stagedFight.step === 'drawP1' && player.id !== stagedFight.p1Id) {
+                        // Skip P1 draw, this click selects P2 directly
+                        setStagedFight({ p1Path: null, p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
+                      } else if (stagedFight.step === 'selectP2' && player.id !== stagedFight.p1Id) {
+                        setStagedFight({ p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
+                      } else if (stagedFight.step === 'drawP2' && player.id !== stagedFight.p1Id && player.id !== stagedFight.p2Id) {
+                        // Skip P2 draw, advance to ready
+                        setStagedFight({ p2Path: null, step: 'ready' });
+                        setShowOutcomePicker(true);
+                      }
+                    }}
+                    onReviveClick={() => {
+                      if (!stagedRevive.medicId) {
+                        // First click: select an alive teammate as medic
+                        if (player.status !== 'alive') return;
+                        setStagedRevive({ medicId: player.id, medicTeamId: team.id });
+                      } else if (!stagedRevive.targetId) {
+                        // Second click: select a knocked teammate on the same team
+                        if (player.status !== 'knocked') return;
+                        if (team.id !== stagedRevive.medicTeamId) return; // same team only
+                        setStagedRevive({ targetId: player.id, targetTeamId: team.id });
+                      }
+                    }}
+                  />
+                ))}
+              </React.Fragment>
+            ))}
+
+            {selectedPlayerId && (
+              <Transformer ref={playerTrRef}
+                boundBoxFunc={(oldBox, newBox) => (newBox.width < 5 || newBox.height < 5 ? oldBox : newBox)}
+                borderStroke="#FFFFFF" anchorStroke="#FFFFFF" anchorFill="#C47C2B" anchorSize={8}
               />
+            )}
+
+            {selectedElementId && (
+              <Transformer ref={trRef}
+                boundBoxFunc={(oldBox, newBox) => (newBox.width < 5 || newBox.height < 5 ? oldBox : newBox)}
+                borderStroke="#FFFFFF" anchorStroke="#FFFFFF" anchorFill="#C47C2B" anchorSize={8}
+              />
+            )}
+          </Layer>
+
+          {/* Temporary layer for imperative Konva nodes (fight arrows, tracers, revive arcs) */}
+          <Layer ref={temporaryLayerRef} id="temporaryEffects" listening={false} />
+
+          {/* Staging arrows at each player's edge (NO connecting line) */}
+          {stagedFight.p1Id && stagedFight.p2Id && !isAnimating && (() => {
+            const atk = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p1Id);
+            const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p2Id);
+            if (!atk || !vic) return null;
+            const angle1 = Math.atan2(vic.y - atk.y, vic.x - atk.x);
+            const angle2 = Math.atan2(atk.y - vic.y, atk.x - vic.x);
+            const R = 18, L = 28;
+            return (
+              <Layer listening={false}>
+                <Arrow
+                  points={[
+                    atk.x + Math.cos(angle1) * R, atk.y + Math.sin(angle1) * R,
+                    atk.x + Math.cos(angle1) * (R + L), atk.y + Math.sin(angle1) * (R + L),
+                  ]}
+                  stroke="#FF3B30" fill="#FF3B30" strokeWidth={2}
+                  pointerLength={7} pointerWidth={5} opacity={0.65}
+                  listening={false} strokeScaleEnabled={false}
+                />
+                <Arrow
+                  points={[
+                    vic.x + Math.cos(angle2) * R, vic.y + Math.sin(angle2) * R,
+                    vic.x + Math.cos(angle2) * (R + L), vic.y + Math.sin(angle2) * (R + L),
+                  ]}
+                  stroke="#FF6B6B" fill="#FF6B6B" strokeWidth={2}
+                  pointerLength={7} pointerWidth={5} opacity={0.65}
+                  listening={false} strokeScaleEnabled={false}
+                />
+              </Layer>
             );
           })()}
 
-          {/* Players */}
-          {teams.map(team => (
-            <React.Fragment key={team.id}>
-              {team.players.map(player => (
-                <PlayerNode
-                  key={player.id}
-                  player={player}
-                  team={team}
-                  updatePlayerPosition={updatePlayerPosition}
-                  commitHistory={commitHistory}
-                  activeTool={activeTool}
-                  onSelect={() => setSelectedPlayerId(player.id)}
-                  setEditingTeamId={(id) => { setEditingTeamId(id); setAddTeamModalOpen(true); }}
-                  onToggleLock={() => togglePlayerLock(team.id, player.id)}
-                  onPathClick={() => {
-                    if (!isDrawingPath) {
-                      setPathTargetPlayerId(player.id);
-                      setPathTargetTeamId(team.id);
-                    }
-                  }}
-                  onContextMenu={(e) => {
-                    e.evt.preventDefault();
-                    e.cancelBubble = true;
-                    const stage = stageRef.current;
-                    if (!stage) return;
-                    const container = stage.container().getBoundingClientRect();
-                    const pointerPos = stage.getPointerPosition();
-                    if (!pointerPos) return;
-                    setContextMenu({
-                      playerId: player.id,
-                      teamId: team.id,
-                      screenX: pointerPos.x + container.left,
-                      screenY: pointerPos.y + container.top,
-                      status: player.status || 'alive',
-                    });
-                  }}
-                  onFightClick={() => {
-                    if (player.status !== 'alive') return; // only alive players
-                    if (stagedFight.step === 'selectP1') {
-                      setStagedFight({ p1Id: player.id, p1TeamId: team.id, step: 'drawP1' });
-                    } else if (stagedFight.step === 'drawP1' && player.id !== stagedFight.p1Id) {
-                      // Skip P1 draw, this click selects P2 directly
-                      setStagedFight({ p1Path: null, p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
-                    } else if (stagedFight.step === 'selectP2' && player.id !== stagedFight.p1Id) {
-                      setStagedFight({ p2Id: player.id, p2TeamId: team.id, step: 'drawP2' });
-                    } else if (stagedFight.step === 'drawP2' && player.id !== stagedFight.p1Id && player.id !== stagedFight.p2Id) {
-                      // Skip P2 draw, advance to ready
-                      setStagedFight({ p2Path: null, step: 'ready' });
-                      setShowOutcomePicker(true);
-                    }
-                  }}
-                  onReviveClick={() => {
-                    if (!stagedRevive.medicId) {
-                      // First click: select an alive teammate as medic
-                      if (player.status !== 'alive') return;
-                      setStagedRevive({ medicId: player.id, medicTeamId: team.id });
-                    } else if (!stagedRevive.targetId) {
-                      // Second click: select a knocked teammate on the same team
-                      if (player.status !== 'knocked') return;
-                      if (team.id !== stagedRevive.medicTeamId) return; // same team only
-                      setStagedRevive({ targetId: player.id, targetTeamId: team.id });
-                    }
-                  }}
+          {/* Fight draft path while drawing */}
+          {isDrawingFightPath && fightDraftPath.length >= 4 && (() => {
+            const fightTeamId = stagedFight.step === 'drawP1' ? stagedFight.p1TeamId : stagedFight.p2TeamId;
+            const team = fightTeamId ? teams.find(t => t.id === fightTeamId) : null;
+            const color = team?.themeColor || '#FF3B30';
+            return (
+              <Layer listening={false}>
+                <Line
+                  points={fightDraftPath}
+                  stroke={color}
+                  strokeWidth={2}
+                  opacity={0.6}
+                  dash={[6, 4]}
+                  lineCap="round"
+                  lineJoin="round"
+                  listening={false}
+                  strokeScaleEnabled={false}
+                  tension={0.3}
                 />
-              ))}
-            </React.Fragment>
-          ))}
-
-          {selectedPlayerId && (
-            <Transformer ref={playerTrRef}
-              boundBoxFunc={(oldBox, newBox) => (newBox.width < 5 || newBox.height < 5 ? oldBox : newBox)}
-              borderStroke="#FFFFFF" anchorStroke="#FFFFFF" anchorFill="#C47C2B" anchorSize={8}
-            />
-          )}
-
-          {selectedElementId && (
-            <Transformer ref={trRef}
-              boundBoxFunc={(oldBox, newBox) => (newBox.width < 5 || newBox.height < 5 ? oldBox : newBox)}
-              borderStroke="#FFFFFF" anchorStroke="#FFFFFF" anchorFill="#C47C2B" anchorSize={8}
-            />
-          )}
-        </Layer>
-
-        {/* Temporary layer for imperative Konva nodes (fight arrows, tracers, revive arcs) */}
-        <Layer ref={temporaryLayerRef} id="temporaryEffects" listening={false} />
-
-        {/* Staging arrows at each player's edge (NO connecting line) */}
-        {stagedFight.p1Id && stagedFight.p2Id && !isAnimating && (() => {
-          const atk = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p1Id);
-          const vic = teams.flatMap(t => t.players).find(p => p.id === stagedFight.p2Id);
-          if (!atk || !vic) return null;
-          const angle1 = Math.atan2(vic.y - atk.y, vic.x - atk.x);
-          const angle2 = Math.atan2(atk.y - vic.y, atk.x - vic.x);
-          const R = 18, L = 28;
-          return (
-            <Layer listening={false}>
-              <Arrow
-                points={[
-                  atk.x + Math.cos(angle1) * R, atk.y + Math.sin(angle1) * R,
-                  atk.x + Math.cos(angle1) * (R + L), atk.y + Math.sin(angle1) * (R + L),
-                ]}
-                stroke="#FF3B30" fill="#FF3B30" strokeWidth={2}
-                pointerLength={7} pointerWidth={5} opacity={0.65}
-                listening={false} strokeScaleEnabled={false}
-              />
-              <Arrow
-                points={[
-                  vic.x + Math.cos(angle2) * R, vic.y + Math.sin(angle2) * R,
-                  vic.x + Math.cos(angle2) * (R + L), vic.y + Math.sin(angle2) * (R + L),
-                ]}
-                stroke="#FF6B6B" fill="#FF6B6B" strokeWidth={2}
-                pointerLength={7} pointerWidth={5} opacity={0.65}
-                listening={false} strokeScaleEnabled={false}
-              />
-            </Layer>
-          );
-        })()}
-
-        {/* Fight draft path while drawing */}
-        {isDrawingFightPath && fightDraftPath.length >= 4 && (() => {
-          const fightTeamId = stagedFight.step === 'drawP1' ? stagedFight.p1TeamId : stagedFight.p2TeamId;
-          const team = fightTeamId ? teams.find(t => t.id === fightTeamId) : null;
-          const color = team?.themeColor || '#FF3B30';
-          return (
-            <Layer listening={false}>
-              <Line
-                points={fightDraftPath}
-                stroke={color}
-                strokeWidth={2}
-                opacity={0.6}
-                dash={[6, 4]}
-                lineCap="round"
-                lineJoin="round"
-                listening={false}
-                strokeScaleEnabled={false}
-                tension={0.3}
-              />
-            </Layer>
-          );
-        })()}
-
-        {/* Fight staged paths preview (saved p1Path / p2Path) */}
-        {!isAnimating && (() => {
-          const nodes: React.ReactNode[] = [];
-          if (stagedFight.p1Path && stagedFight.p1Path.length >= 4) {
-            const t = stagedFight.p1TeamId ? teams.find(tm => tm.id === stagedFight.p1TeamId) : null;
-            nodes.push(
-              <Line key="fp1" points={stagedFight.p1Path}
-                stroke={t?.themeColor || '#FF3B30'} strokeWidth={2}
-                opacity={0.35} dash={[8, 5]} lineCap="round"
-                listening={false} strokeScaleEnabled={false} tension={0.3}
-              />
+              </Layer>
             );
-          }
-          if (stagedFight.p2Path && stagedFight.p2Path.length >= 4) {
-            const t = stagedFight.p2TeamId ? teams.find(tm => tm.id === stagedFight.p2TeamId) : null;
-            nodes.push(
-              <Line key="fp2" points={stagedFight.p2Path}
-                stroke={t?.themeColor || '#FF6B6B'} strokeWidth={2}
-                opacity={0.35} dash={[8, 5]} lineCap="round"
-                listening={false} strokeScaleEnabled={false} tension={0.3}
-              />
-            );
-          }
-          if (nodes.length === 0) return null;
-          return <Layer listening={false}>{nodes}</Layer>;
-        })()}
+          })()}
 
-        {/* Eraser cursor overlay */}
-        <Layer id="toolOverlays" listening={false}>
-          {activeTool === 'eraser' && (
-            <Circle
-              ref={eraserCursorRef}
-              x={-1000} y={-1000}
-              radius={eraserSize / 2}
-              stroke="#FFFFFF" strokeWidth={1 / zoom}
-              opacity={0.8} dash={[4 / zoom, 4 / zoom]}
-            />
-          )}
-        </Layer>
-      </Stage>
+          {/* Fight staged paths preview (saved p1Path / p2Path) */}
+          {!isAnimating && (() => {
+            const nodes: React.ReactNode[] = [];
+            if (stagedFight.p1Path && stagedFight.p1Path.length >= 4) {
+              const t = stagedFight.p1TeamId ? teams.find(tm => tm.id === stagedFight.p1TeamId) : null;
+              nodes.push(
+                <Line key="fp1" points={stagedFight.p1Path}
+                  stroke={t?.themeColor || '#FF3B30'} strokeWidth={2}
+                  opacity={0.35} dash={[8, 5]} lineCap="round"
+                  listening={false} strokeScaleEnabled={false} tension={0.3}
+                />
+              );
+            }
+            if (stagedFight.p2Path && stagedFight.p2Path.length >= 4) {
+              const t = stagedFight.p2TeamId ? teams.find(tm => tm.id === stagedFight.p2TeamId) : null;
+              nodes.push(
+                <Line key="fp2" points={stagedFight.p2Path}
+                  stroke={t?.themeColor || '#FF6B6B'} strokeWidth={2}
+                  opacity={0.35} dash={[8, 5]} lineCap="round"
+                  listening={false} strokeScaleEnabled={false} tension={0.3}
+                />
+              );
+            }
+            if (nodes.length === 0) return null;
+            return <Layer listening={false}>{nodes}</Layer>;
+          })()}
+
+          {/* Eraser cursor overlay */}
+          <Layer id="toolOverlays" listening={false}>
+            {activeTool === 'eraser' && (
+              <Circle
+                ref={eraserCursorRef}
+                x={-1000} y={-1000}
+                radius={eraserSize / 2}
+                stroke="#FFFFFF" strokeWidth={1 / zoom}
+                opacity={0.8} dash={[4 / zoom, 4 / zoom]}
+              />
+            )}
+          </Layer>
+        </Stage>
       </div>
 
       {/* Text editing textarea overlay */}
